@@ -1,0 +1,58 @@
+name: in_old_days_app
+description: In Old Days - show historical events using local SQLite DB
+publish_to: 'none' # private project
+version: 1.0.0+1
+
+environment:
+  sdk: ">=2.17.0 <4.0.0"
+
+dependencies:
+  flutter:
+    sdk: flutter
+
+  # 🧩 Giao diện cơ bản
+  cupertino_icons: ^1.0.8
+  crypto: ^3.0.3
+  # 🧩 Làm việc với file, DB cục bộ
+  path_provider: ^2.1.2
+  sqflite: ^2.3.3
+  shared_preferences: ^2.3.2
+
+  # 🧩 Bản đồ
+  maplibre_gl: ^0.24.0
+  latlong2: ^0.9.0
+
+  # 🧩 Xử lý thời gian, format ngày tháng
+  intl: ^0.20.2
+
+  # 🧩 Gọi API nếu cần (VD tải ảnh marker)
+  http: ^1.2.2
+
+  # 🧩 Animation / hiệu ứng UI (không bắt buộc nhưng khuyến nghị)
+  flutter_animate: ^4.5.0
+
+  # 🖼️ Thư viện xử lý ảnh (cần thiết cho _loadImageFromAssets trong EventMapScreen)
+  image: ^4.2.0 # Đảm bảo thư viện này có trong dependencies
+
+dev_dependencies:
+  flutter_test:
+    sdk: flutter
+  flutter_lints: ^4.0.0
+
+flutter:
+  uses-material-design: true
+
+  assets:
+    # 🗂️ Database gốc
+    - assets/in_old_days.db
+
+    # 🖼️ Thư mục ảnh cho sự kiện
+    - assets/Image/
+
+    # 📍 Icon fallback cho marker bản đồ
+    - assets/marker.png
+
+    # 🗺️ GeoJSON bản đồ Việt Nam
+    - assets/vn.json # 🟢 ĐÃ THÊM
+
+# Vui lòng chạy lệnh 'flutter pub get' sau khi cập nhật file này.

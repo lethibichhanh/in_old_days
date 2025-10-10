@@ -49,19 +49,19 @@ class _ProfileScreenState extends State<ProfileScreen> {
   Future<void> _navigateToUpdateProfile() async {
     if (_user == null) return;
 
+    // Điều hướng đến trang cập nhật hồ sơ
     final updatedUser = await Navigator.pushNamed(
       context,
-      '/update_profile',
-      arguments: {'user': _user},
+      '/update_profile', // 🔹 Chỉ cần tên route
+      arguments: {'user': _user}, // Truyền đối tượng UserModel
     );
 
+    // Nếu UpdateProfileScreen trả về user đã cập nhật
     if (updatedUser is UserModel) {
       setState(() => _user = updatedUser);
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("✅ Thông tin người dùng đã được cập nhật!")),
       );
-    } else {
-      await _refreshUserData(); // reload lại nếu quay về mà có thể DB đã thay đổi
     }
   }
 

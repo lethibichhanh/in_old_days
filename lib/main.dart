@@ -6,6 +6,8 @@ import 'db/db_helper.dart'; // Quản lý SQLite
 import 'screens/login_screen.dart';
 import 'screens/register_screen.dart';
 import 'screens/home_screen.dart';
+import 'screens/profile_screen.dart';
+import 'screens/update_profile_screen.dart';
 import 'screens/figures_list_screen.dart'; // 📜 Danh sách nhân vật
 // import 'screens/figure_detail_screen.dart'; // KHÔNG CẦN định tuyến ở đây
 
@@ -58,6 +60,8 @@ class InOldDaysApp extends StatelessWidget {
         '/login': (context) => const LoginScreen(),
         '/register': (context) => const RegisterScreen(),
         '/home': (context) => const HomeScreen(),
+        '/profile': (context) => const ProfileScreen(),
+        '/update_profile': (context) => const UpdateProfileScreen(), // ✅ Route cập nhật
 
         // 📜 Trang danh sách nhân vật
         '/figures': (context) => const FiguresListScreen(),

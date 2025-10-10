@@ -1,63 +1,8 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
-
-// Đảm bảo file chứa class UserModel được import
-// import '../models/user_model.dart'; // Giả sử UserModel nằm ở đây
-
-// Do bạn đã cung cấp class UserModel, tôi sẽ đặt nó ở đây tạm thời:
-class UserModel {
-  final int? id;
-  final String username;
-  final String? fullname;
-  final String email;
-  final String passwordHash;
-  final String? avatar;
-
-  UserModel({
-    this.id,
-    required this.username,
-    required this.email,
-    required this.passwordHash,
-    this.fullname,
-    this.avatar,
-  });
-
-  // Chuyển sang Map (để insert/update) - Dùng tên cột DB
-  Map<String, dynamic> toDbMap() {
-    return {
-      'user_id': id,
-      'full_name': fullname, // Tên cột DB
-      'email': email,
-      'avatar_url': avatar, // Tên cột DB
-      'password_hash': passwordHash,
-      // Lưu ý: 'username' không được đưa vào đây nếu nó không phải là cột DB
-    };
-  }
-
-  // Copy (giữ nguyên, chỉ cập nhật tên trường nếu cần)
-  UserModel copyWith({
-    int? id,
-    String? username,
-    String? fullname,
-    String? email,
-    String? avatar,
-    String? passwordHash,
-  }) {
-    return UserModel(
-      id: id ?? this.id,
-      username: username ?? this.username,
-      fullname: fullname ?? this.fullname,
-      email: email ?? this.email,
-      avatar: avatar ?? this.avatar,
-      passwordHash: passwordHash ?? this.passwordHash,
-    );
-  }
-}
-
-// -----------------------------------------------------------
+import '../models/user_model.dart';
 
 class UpdateProfileScreen extends StatefulWidget {
-  // 💡 SỬA: UserModel user được truyền qua constructor hoặc arguments
   final UserModel? user;
 
   const UpdateProfileScreen({super.key, this.user});
@@ -68,7 +13,6 @@ class UpdateProfileScreen extends StatefulWidget {
 
 class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   UserModel? _user;
-
   final _fullnameController = TextEditingController();
   final _emailController = TextEditingController();
   final _avatarController = TextEditingController();
@@ -78,24 +22,22 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // 1. Lấy user từ arguments (Cách truyền phổ biến)
     if (_user == null) {
+      // 1️⃣ Lấy user từ arguments khi Navigator.pushNamed
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null && args['user'] is UserModel) {
         _user = args['user'] as UserModel;
       }
-    }
 
-    // 2. Lấy user từ constructor (Cách truyền tốt hơn)
-    if (_user == null && widget.user != null) {
-      _user = widget.user;
-    }
+      // 2️⃣ Nếu chưa có, lấy từ widget.user
+      _user ??= widget.user;
 
-    // Khởi tạo controllers sau khi có đối tượng _user
-    if (_user != null && _fullnameController.text.isEmpty) {
-      _fullnameController.text = _user!.fullname ?? '';
-      _emailController.text = _user!.email;
-      _avatarController.text = _user!.avatar ?? '';
+      // 3️⃣ Gán dữ liệu cho TextField
+      if (_user != null && _fullnameController.text.isEmpty) {
+        _fullnameController.text = _user!.fullname ?? '';
+        _emailController.text = _user!.email;
+        _avatarController.text = _user!.avatar ?? '';
+      }
     }
   }
 
@@ -107,14 +49,12 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     super.dispose();
   }
 
+  /// 🔹 Gọi DBHelper.updateUser() để cập nhật vào SQLite
   Future<void> _updateProfile() async {
-    // Kiểm tra user và ID (bắt buộc)
     if (_user == null || _user!.id == null) {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("⚠️ Lỗi hệ thống: Không có ID người dùng")),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text("⚠️ Không tìm thấy thông tin người dùng")),
+      );
       return;
     }
 
@@ -122,7 +62,6 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     final email = _emailController.text.trim();
     final avatar = _avatarController.text.trim();
 
-    // Kiểm tra tính hợp lệ của dữ liệu đầu vào
     if (fullname.isEmpty || email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("⚠️ Vui lòng nhập đầy đủ thông tin")),
@@ -140,46 +79,35 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 💡 SỬA: Tạo đối tượng UserModel đã cập nhật
-      final updatedUserModel = _user!.copyWith(
+      // ✅ Tạo bản sao user mới đã cập nhật
+      final updatedUser = _user!.copyWith(
         fullname: fullname,
         email: email,
         avatar: avatar,
       );
 
-      // 💡 SỬA: Chuyển đổi UserModel sang Map DB
-      final updatedDbMap = updatedUserModel.toDbMap();
-
-      // Chỉ giữ lại các trường cần UPDATE (loại bỏ id và username không cần thiết)
-      updatedDbMap.remove('user_id');
-
-      final rows = await DBHelper.instance.update(
-        "users",
-        updatedDbMap,
-        where: "user_id = ?",
-        whereArgs: [_user!.id],
-      );
+      // ✅ Gọi DBHelper để update trong SQLite
+      final rows = await DBHelper.updateUser(updatedUser);
 
       if (rows > 0) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("✅ Cập nhật thành công")),
+            const SnackBar(content: Text("✅ Cập nhật thông tin thành công!")),
           );
-          // 💡 SỬA: Trả về đối tượng UserModel đã được cập nhật
-          Navigator.pop(context, updatedUserModel);
+          Navigator.pop(context, updatedUser); // 🔙 Trả về user mới cho ProfileScreen
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("⚠️ Cập nhật không thành công (0 dòng bị ảnh hưởng)")),
+            const SnackBar(content: Text("⚠️ Không có dòng nào được cập nhật")),
           );
         }
       }
     } catch (e, st) {
-      debugPrint("❌ Lỗi cập nhật profile: $e\n$st");
+      debugPrint("❌ Lỗi cập nhật: $e\n$st");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Lỗi cập nhật: ${e.toString()}")),
+          SnackBar(content: Text("Lỗi cập nhật: $e")),
         );
       }
     } finally {
@@ -191,11 +119,10 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   Widget build(BuildContext context) {
     if (_user == null) {
       return const Scaffold(
-        body: Center(child: Text("❌ Không tìm thấy user để cập nhật. Vui lòng thử lại.")),
+        body: Center(child: Text("❌ Không tìm thấy user để cập nhật.")),
       );
     }
 
-    // Phần giao diện giữ nguyên, chỉ sử dụng _user!
     return Scaffold(
       appBar: AppBar(
         title: const Text("Cập nhật thông tin"),
@@ -224,111 +151,81 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
           ),
           SingleChildScrollView(
             padding: const EdgeInsets.all(20),
-            child: AnimatedContainer(
-              duration: const Duration(milliseconds: 400),
-              curve: Curves.easeInOut,
-              child: Card(
-                elevation: 12,
-                shadowColor: Colors.black.withOpacity(0.2),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: Padding(
-                  padding: const EdgeInsets.all(24),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 55,
-                        backgroundColor: Colors.grey.shade200,
-                        backgroundImage: _avatarController.text.isNotEmpty
-                            ? NetworkImage(_avatarController.text)
-                            : null,
-                        child: _avatarController.text.isEmpty
-                            ? const Icon(Icons.person,
-                            size: 55, color: Colors.grey)
-                            : null,
-                      ),
-                      const SizedBox(height: 20),
-                      _buildTextField(
-                        controller: _fullnameController,
-                        label: "Họ tên",
-                        icon: Icons.badge,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _emailController,
-                        label: "Email",
-                        icon: Icons.email,
-                        keyboard: TextInputType.emailAddress,
-                      ),
-                      const SizedBox(height: 16),
-                      _buildTextField(
-                        controller: _avatarController,
-                        label: "Avatar URL",
-                        icon: Icons.image,
-                        onChanged: (_) => setState(() {}),
-                      ),
-                      const SizedBox(height: 30),
-                      SizedBox(
-                        width: double.infinity,
-                        child: ElevatedButton.icon(
-                          onPressed: _isLoading ? null : _updateProfile,
-                          style: ElevatedButton.styleFrom(
-                            padding: const EdgeInsets.symmetric(vertical: 16),
-                            backgroundColor: Colors.deepPurple,
-                            shape: RoundedRectangleBorder(
-                              borderRadius: BorderRadius.circular(16),
-                            ),
-                            elevation: 6,
+            child: Card(
+              elevation: 10,
+              shadowColor: Colors.black.withOpacity(0.2),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+              child: Padding(
+                padding: const EdgeInsets.all(24),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 55,
+                      backgroundColor: Colors.grey.shade200,
+                      backgroundImage: _avatarController.text.isNotEmpty
+                          ? NetworkImage(_avatarController.text)
+                          : null,
+                      child: _avatarController.text.isEmpty
+                          ? const Icon(Icons.person, size: 55, color: Colors.grey)
+                          : null,
+                    ),
+                    const SizedBox(height: 20),
+                    _buildTextField(_fullnameController, "Họ và tên", Icons.badge),
+                    const SizedBox(height: 16),
+                    _buildTextField(_emailController, "Email", Icons.email,
+                        keyboardType: TextInputType.emailAddress),
+                    const SizedBox(height: 16),
+                    _buildTextField(_avatarController, "Avatar URL", Icons.image,
+                        onChanged: (_) => setState(() {})),
+                    const SizedBox(height: 30),
+                    SizedBox(
+                      width: double.infinity,
+                      child: ElevatedButton.icon(
+                        onPressed: _isLoading ? null : _updateProfile,
+                        style: ElevatedButton.styleFrom(
+                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          backgroundColor: Colors.deepPurple,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(14),
                           ),
-                          icon: _isLoading
-                              ? const SizedBox(
-                            width: 22,
-                            height: 22,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                              : const Icon(Icons.save),
-                          label: const Text(
-                            "Lưu thay đổi",
-                            style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold,
-                              color: Colors.white,
-                            ),
+                          elevation: 6,
+                        ),
+                        icon: _isLoading
+                            ? const SizedBox(
+                          width: 20,
+                          height: 20,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
                           ),
+                        )
+                            : const Icon(Icons.save),
+                        label: const Text(
+                          "Lưu thay đổi",
+                          style: TextStyle(fontSize: 16, color: Colors.white),
                         ),
                       ),
-                    ],
-                  ),
+                    ),
+                  ],
                 ),
               ),
             ),
           ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                child: CircularProgressIndicator(color: Colors.white),
-              ),
-            ),
         ],
       ),
     );
   }
 
-  Widget _buildTextField({
-    required TextEditingController controller,
-    required String label,
-    required IconData icon,
-    TextInputType? keyboard,
-    ValueChanged<String>? onChanged,
-  }) {
+  Widget _buildTextField(
+      TextEditingController controller,
+      String label,
+      IconData icon, {
+        TextInputType? keyboardType,
+        ValueChanged<String>? onChanged,
+      }) {
     return TextField(
       controller: controller,
-      keyboardType: keyboard,
+      keyboardType: keyboardType,
       onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
@@ -336,7 +233,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
         filled: true,
         fillColor: Colors.grey.shade100,
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
+          borderRadius: BorderRadius.circular(14),
           borderSide: BorderSide.none,
         ),
       ),

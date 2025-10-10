@@ -1,13 +1,18 @@
-// lib/models/user_model.dart
+import 'package:sqflite/sqflite.dart'; // Chỉ cần nếu dùng cho type checking
 
 class UserModel {
-  // ✅ Tên trường id trong Dart
   final int? id;
-  final String username; // Giữ lại username
-  final String? fullname;
+  // Giả định username là trường cần thiết cho Flutter, mặc dù thiếu trong schema SQL mới nhất.
+  // Tôi thêm nó vào để code Flutter không bị lỗi.
+  final String username;
   final String email;
-  final String? avatar;
   final String passwordHash;
+  final String? fullname;
+  final String? avatar;
+  // 💡 CẬP NHẬT: Thay đổi từ INTEGER sang String để khớp với schema SQLite mới nhất
+  final String role;
+  final String? createdAt;
+  final String? updatedAt;
 
   UserModel({
     this.id,
@@ -16,54 +21,62 @@ class UserModel {
     required this.passwordHash,
     this.fullname,
     this.avatar,
+    this.role = 'user',
+    this.createdAt,
+    this.updatedAt,
   });
 
-  // 1. ✅ Tạo từ Map (database)
+  // 1. Chuyển đổi từ Map (Database Column Names)
   factory UserModel.fromMap(Map<String, dynamic> map) {
+    // Phương thức này dùng khi đọc từ DB (DBHelper)
     return UserModel(
-      // 💡 SỬA: Đọc từ 'user_id' thay vì 'id'
-      id: map['user_id'] is int ? map['user_id'] : int.tryParse(map['user_id'].toString()),
-
-      // 💡 THÊM: Nếu bạn dùng 'username' trong app nhưng DB không có,
-      // có thể tạm thời lấy từ 'email' hoặc giữ lại như cũ nếu bạn xử lý 'username' trong code DB.
-      // Tuy nhiên, dựa trên DB schema, không có cột 'username' -> giữ nguyên logic nếu nó không phải là cột DB.
+      id: map['user_id'] as int?,
+      // Giả định username được tính toán nếu không có cột DB tương ứng
       username: map['username'] ?? map['email'].split('@').first,
-
-      // 💡 SỬA: Đọc từ 'full_name' thay vì 'fullname'
-      fullname: map['full_name'],
-
-      email: map['email'] ?? '',
-
-      // 💡 SỬA: Đọc từ 'avatar_url' thay vì 'avatar'
-      avatar: map['avatar_url'],
-
-      passwordHash: map['password_hash'] ?? '',
+      fullname: map['full_name'], // Tên cột DB
+      email: map['email'] as String,
+      avatar: map['avatar_url'], // Tên cột DB
+      passwordHash: map['password_hash'] as String,
+      role: map['role']?.toString() ?? 'user',
+      createdAt: map['created_at'],
+      updatedAt: map['updated_at'],
     );
   }
 
-  // 2. ✅ Chuyển sang Map (để insert/update)
-  Map<String, dynamic> toMap() {
+  // 2. Chuyển đổi từ Map (Flutter Arguments/Legacy)
+  factory UserModel.fromMapArguments(Map<String, dynamic> map) {
+    // Phương thức này dùng khi đọc từ arguments (nếu arguments vẫn là Map)
+    // Cần ánh xạ từ tên trường Dart sang tên trường truyền vào (có thể là tên cột DB)
+    return UserModel(
+      id: map['id'] ?? map['user_id'] as int?,
+      username: map['username'] ?? map['email']?.split('@').first,
+      fullname: map['fullname'] ?? map['full_name'],
+      email: map['email'] as String,
+      avatar: map['avatar'] ?? map['avatar_url'],
+      passwordHash: map['password_hash'] ?? map['passwordHash'] ?? '',
+      role: map['role']?.toString() ?? 'user',
+      createdAt: map['created_at'],
+      updatedAt: map['updated_at'],
+    );
+  }
+
+  // 3. Chuyển sang Map (để insert/update DB)
+  Map<String, dynamic> toDbMap() {
+    // Phương thức này dùng khi ghi vào DB (DBHelper)
     return {
-      // 💡 SỬA: Ghi vào 'user_id'
       'user_id': id,
-      // Giả định bạn cần trường này cho một số logic ứng dụng (không phải cột DB)
-      'username': username,
-
-      // 💡 SỬA: Ghi vào 'full_name'
+      // 'username' không đưa vào nếu không phải cột DB và DB không tự tính toán
       'full_name': fullname,
-
       'email': email,
-
-      // 💡 SỬA: Ghi vào 'avatar_url'
       'avatar_url': avatar,
-
       'password_hash': passwordHash,
-
-      // Có thể thêm 'role' hoặc các trường mặc định khác nếu cần insert
+      'role': role,
+      'created_at': createdAt,
+      'updated_at': DateTime.now().toIso8601String(), // Cập nhật updated_at
     };
   }
 
-  // 3. ✅ Copy (giữ nguyên, chỉ cập nhật tên trường nếu cần)
+  // 4. Copy (cho state management)
   UserModel copyWith({
     int? id,
     String? username,
@@ -71,6 +84,9 @@ class UserModel {
     String? email,
     String? avatar,
     String? passwordHash,
+    String? role,
+    String? createdAt,
+    String? updatedAt,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -79,6 +95,9 @@ class UserModel {
       email: email ?? this.email,
       avatar: avatar ?? this.avatar,
       passwordHash: passwordHash ?? this.passwordHash,
+      role: role ?? this.role,
+      createdAt: createdAt ?? this.createdAt,
+      updatedAt: updatedAt ?? this.updatedAt,
     );
   }
 }

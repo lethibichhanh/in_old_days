@@ -4,6 +4,7 @@ import 'package:path/path.dart';
 import 'package:sqflite/sqflite.dart';
 import 'package:flutter/foundation.dart';
 import '../models/historical_figure.dart';
+import '../models/user_model.dart';
 
 class DBHelper {
   // ================== SINGLETON ==================
@@ -13,7 +14,7 @@ class DBHelper {
   static Database? _db;
   static const _dbName = "in_old_days.db";
   // ✅ Tăng version lên 16 để đảm bảo các thay đổi schema (thêm role/avatar_url) được áp dụng
-  static const _dbVersion = 17;
+  static const _dbVersion = 18;
 
   // ================== INITIALIZATION ==================
   static Future<void> prepareDatabaseFromAssets() async {
@@ -266,7 +267,30 @@ class DBHelper {
     final res = await db.query('users', where: 'email = ?', whereArgs: [email], limit: 1);
     return res.isNotEmpty ? res.first : null;
   }
+  static Future<UserModel?> getUserById(int userId) async {
+    final db = await database;
+    final res = await db.query(
+      'users', // ✅ Đổi từ userTable sang chuỗi 'users'
+      where: 'user_id = ?',
+      whereArgs: [userId],
+      limit: 1,
+    );
 
+    if (res.isNotEmpty) {
+      return UserModel.fromMap(res.first);
+    }
+    return null;
+  }
+
+  static Future<int> updateUser(UserModel user) async {
+    final db = await database;
+    return await db.update(
+      'users',
+      user.toDbMap(),
+      where: 'user_id = ?',
+      whereArgs: [user.id],
+    );
+  }
   // ... (Giữ nguyên các hàm khác)
   // ================== EVENTS ==================
   static Future<List<Map<String, dynamic>>> getAllEvents() async {

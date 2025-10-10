@@ -7,7 +7,14 @@ import 'package:flutter/services.dart';
 
 class EventDetailScreen extends StatefulWidget {
   final int eventId;
-  const EventDetailScreen({super.key, required this.eventId});
+  // ✅ THÊM userId (nullable) để nhận ID người dùng đã đăng nhập
+  final int? userId;
+
+  const EventDetailScreen({
+    super.key,
+    required this.eventId,
+    this.userId // Nhận userId từ HomeScreen/FavoriteScreen
+  });
 
   @override
   State<EventDetailScreen> createState() => _EventDetailScreenState();
@@ -25,11 +32,23 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     _loadEvent();
   }
 
+  @override
+  void dispose() {
+    _mapController = null;
+    super.dispose();
+  }
+
   /// 📦 Lấy dữ liệu sự kiện + kiểm tra yêu thích
   Future<void> _loadEvent() async {
     try {
       final e = await DBHelper.getEventById(widget.eventId);
-      final isFav = await DBHelper.isFavorite(widget.eventId);
+
+      bool isFav = false;
+      // 🔄 KIỂM TRA YÊU THÍCH: Chỉ kiểm tra nếu có userId
+      if (widget.userId != null) {
+        isFav = await DBHelper.isFavorite(widget.eventId, userId: widget.userId!);
+      }
+
       setState(() {
         _event = e != null ? EventModel.fromMap(e) : null;
         _isFavorite = isFav;
@@ -45,27 +64,45 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   Future<void> _toggleFavorite() async {
     if (_event == null) return;
 
+    // ⚠️ XỬ LÝ CHƯA ĐĂNG NHẬP
+    if (widget.userId == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(
+          content: Text("⚠️ Vui lòng đăng nhập để lưu sự kiện yêu thích."),
+          backgroundColor: Colors.orange,
+        ),
+      );
+      return;
+    }
+
     try {
+      // ✅ SỬ DỤNG userId THỰC TẾ
       if (_isFavorite) {
-        await DBHelper.removeFavorite(widget.eventId, userId: 1);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("💔 Đã xoá khỏi danh sách yêu thích")),
-        );
+        await DBHelper.removeFavorite(widget.eventId, userId: widget.userId!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("💔 Đã xoá khỏi danh sách yêu thích")),
+          );
+        }
       } else {
-        await DBHelper.addFavorite(widget.eventId, userId: 1);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("❤️ Đã thêm vào danh sách yêu thích")),
-        );
+        await DBHelper.addFavorite(widget.eventId, userId: widget.userId!);
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            const SnackBar(content: Text("❤️ Đã thêm vào danh sách yêu thích")),
+          );
+        }
       }
       setState(() => _isFavorite = !_isFavorite);
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("⚠️ Lỗi khi cập nhật yêu thích: $e")),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text("⚠️ Lỗi khi cập nhật yêu thích: $e")),
+        );
+      }
     }
   }
 
-  /// 🖼️ Hiển thị hình ảnh
+  /// 🖼️ Hiển thị hình ảnh (Giữ nguyên)
   Widget _buildImageWidget(String? imageUrl) {
     if (imageUrl == null || imageUrl.trim().isEmpty) {
       return const Center(
@@ -112,6 +149,9 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               height: 220,
               width: double.infinity,
               fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) => const Center(
+                  child: Icon(Icons.broken_image, size: 80, color: Colors.grey)
+              ),
             );
           }
           return const Center(
@@ -133,34 +173,38 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     return null;
   }
 
-  /// 🗺️ Hiển thị bản đồ
+  /// 🗺️ Hiển thị bản đồ (Giữ nguyên)
   Widget _buildMapWidget() {
     if (_event?.latitude == null || _event?.longitude == null) {
       return const SizedBox.shrink();
     }
 
-    return SizedBox(
-      height: 300,
-      child: maplibre.MaplibreMap(
-        styleString: 'https://demotiles.maplibre.org/style.json',
-        initialCameraPosition: maplibre.CameraPosition(
-          target: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
-          zoom: 6.0,
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(12),
+      child: SizedBox(
+        height: 300,
+        child: maplibre.MaplibreMap(
+          styleString: 'https://demotiles.maplibre.org/style.json',
+          initialCameraPosition: maplibre.CameraPosition(
+            target: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
+            zoom: 6.0,
+          ),
+          myLocationEnabled: false,
+          compassEnabled: false,
+          onMapCreated: (controller) async {
+            _mapController = controller;
+            await _mapController!.addSymbol(
+              maplibre.SymbolOptions(
+                geometry: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
+                textField: _event!.title ?? 'Sự kiện',
+                textSize: 12.0,
+                textOffset: const Offset(0, 1.5),
+                iconImage: "marker-15",
+                iconAnchor: 'bottom', // Sử dụng chuỗi hằng số cho anchor
+              ),
+            );
+          },
         ),
-        myLocationEnabled: false,
-        compassEnabled: false,
-        onMapCreated: (controller) async {
-          _mapController = controller;
-          await _mapController!.addSymbol(
-            maplibre.SymbolOptions(
-              geometry: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
-              textField: _event!.title ?? 'Sự kiện',
-              textSize: 12.0,
-              textOffset: const Offset(0, 1.5),
-              iconImage: "marker-15",
-            ),
-          );
-        },
       ),
     );
   }
@@ -172,21 +216,23 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         title: const Text('Chi tiết sự kiện'),
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context),
+          onPressed: () => Navigator.pop(context, _isFavorite), // Quay lại và truyền trạng thái yêu thích
         ),
         actions: [
-          IconButton(
-            icon: AnimatedSwitcher(
-              duration: const Duration(milliseconds: 300),
-              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-              child: Icon(
-                _isFavorite ? Icons.favorite : Icons.favorite_border,
-                key: ValueKey(_isFavorite),
-                color: _isFavorite ? Colors.red : Colors.white,
+          // 💡 Chỉ hiển thị nút yêu thích nếu có userId (hoặc luôn hiển thị và xử lý click)
+          if (widget.userId != null || _isFavorite) // Hiển thị nút nếu đã đăng nhập HOẶC đã là yêu thích (tránh giật)
+            IconButton(
+              onPressed: _toggleFavorite,
+              icon: AnimatedSwitcher(
+                duration: const Duration(milliseconds: 300),
+                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+                child: Icon(
+                  _isFavorite ? Icons.favorite : Icons.favorite_border,
+                  key: ValueKey(_isFavorite),
+                  color: _isFavorite ? Colors.red : Colors.white,
+                ),
               ),
             ),
-            onPressed: _toggleFavorite,
-          ),
         ],
       ),
       body: _loading
@@ -298,7 +344,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                   color: Colors.white,
                 ),
                 label: Text(
-                  _isFavorite
+                  // 💡 Thay đổi nội dung nút nếu chưa đăng nhập
+                  widget.userId == null
+                      ? 'Đăng nhập để lưu yêu thích'
+                      : _isFavorite
                       ? 'Đã lưu vào yêu thích'
                       : 'Lưu lại sự kiện yêu thích',
                   style: const TextStyle(
@@ -309,6 +358,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
                 ),
               ),
             ),
+            const SizedBox(height: 16),
           ],
         ),
       ),

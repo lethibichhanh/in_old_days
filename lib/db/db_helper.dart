@@ -13,7 +13,7 @@ class DBHelper {
   static Database? _db;
   static const _dbName = "in_old_days.db";
   // ✅ Tăng version lên 16 để đảm bảo các thay đổi schema (thêm role/avatar_url) được áp dụng
-  static const _dbVersion = 16;
+  static const _dbVersion = 17;
 
   // ================== INITIALIZATION ==================
   static Future<void> prepareDatabaseFromAssets() async {
@@ -341,27 +341,31 @@ class DBHelper {
   }
 
   // ================== FAVORITES ==================
-  static Future<void> addFavorite(int eventId, {int? userId}) async {
+  // 💡 ĐÃ SỬA: Yêu cầu userId bắt buộc và loại bỏ '?? 1'
+  static Future<void> addFavorite(int eventId, {required int userId}) async {
     final db = await database;
     await db.insert(
       'favorites',
-      {'user_id': userId ?? 1, 'event_id': eventId, 'created_at': DateTime.now().toIso8601String()},
+      {'user_id': userId, 'event_id': eventId, 'created_at': DateTime.now().toIso8601String()},
       conflictAlgorithm: ConflictAlgorithm.ignore,
     );
   }
 
-  static Future<void> removeFavorite(int eventId, {int? userId}) async {
+  // 💡 ĐÃ SỬA: Yêu cầu userId bắt buộc và loại bỏ '?? 1'
+  static Future<void> removeFavorite(int eventId, {required int userId}) async {
     final db = await database;
-    await db.delete('favorites', where: 'event_id = ? AND user_id = ?', whereArgs: [eventId, userId ?? 1]);
+    await db.delete('favorites', where: 'event_id = ? AND user_id = ?', whereArgs: [eventId, userId]);
   }
 
-  static Future<bool> isFavorite(int eventId, {int? userId}) async {
+  // 💡 ĐÃ SỬA: Yêu cầu userId bắt buộc và loại bỏ '?? 1'
+  static Future<bool> isFavorite(int eventId, {required int userId}) async {
     final db = await database;
-    final res = await db.query('favorites', where: 'event_id = ? AND user_id = ?', whereArgs: [eventId, userId ?? 1]);
+    final res = await db.query('favorites', where: 'event_id = ? AND user_id = ?', whereArgs: [eventId, userId]);
     return res.isNotEmpty;
   }
 
-  static Future<List<Map<String, dynamic>>> getFavoriteEvents({int? userId}) async {
+  // 💡 ĐÃ SỬA: Yêu cầu userId bắt buộc và loại bỏ '?? 1'
+  static Future<List<Map<String, dynamic>>> getFavoriteEvents({required int userId}) async {
     final db = await database;
     return await db.rawQuery('''
       SELECT e.*, f.created_at AS favorited_at
@@ -369,7 +373,7 @@ class DBHelper {
       JOIN events e ON f.event_id = e.event_id
       WHERE f.user_id = ?
       ORDER BY f.created_at DESC
-    ''', [userId ?? 1]);
+    ''', [userId]);
   }
 
   // Hàm lấy ID sự kiện yêu thích

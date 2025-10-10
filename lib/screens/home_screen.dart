@@ -25,13 +25,31 @@ class _HomeScreenState extends State<HomeScreen> {
   String _filterType = "Tất cả";
 
   UserModel? _user; // ✅ Nhận từ LoginScreen
+  int? get _currentUserId => _user?.id; // Thuận tiện lấy ID người dùng
+  bool _didLoadUser = false; // 💡 Cờ để chỉ tải user một lần
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
-    if (args != null && args['user'] is UserModel) {
-      _user = args['user'];
+
+    // 🛠️ CẬP NHẬT: Xử lý arguments được truyền từ LoginScreen VÀ CHỈ GÁN 1 LẦN
+    if (!_didLoadUser) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null && args['user'] != null) {
+        UserModel? tempUser;
+        if (args['user'] is Map<String, dynamic>) {
+          tempUser = UserModel.fromMap(args['user'] as Map<String, dynamic>);
+        } else if (args['user'] is UserModel) {
+          tempUser = args['user'] as UserModel;
+        }
+
+        if (tempUser != null) {
+          setState(() {
+            _user = tempUser;
+            _didLoadUser = true; // Đánh dấu đã tải
+          });
+        }
+      }
     }
   }
 
@@ -238,6 +256,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 ),
               ),
               currentAccountPicture: CircleAvatar(
+                // 💡 Đảm bảo hiển thị avatar mặc định nếu không có avatar từ DB
                 backgroundImage: (_user?.avatar?.isNotEmpty ?? false)
                     ? NetworkImage(_user!.avatar!)
                     : const AssetImage('assets/default_avatar.png') as ImageProvider,
@@ -263,7 +282,15 @@ class _HomeScreenState extends State<HomeScreen> {
               title: const Text('Sự kiện yêu thích'),
               onTap: () {
                 Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const FavoriteScreen()));
+                // ✅ SỬA LỖI: Kiểm tra _currentUserId và điều hướng
+                if (_currentUserId != null) {
+                  Navigator.push(context, MaterialPageRoute(builder: (_) => FavoriteScreen(userId: _currentUserId!)));
+                } else {
+                  // Xử lý trường hợp user null (không mong muốn nếu đã đăng nhập)
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text("Vui lòng đăng nhập lại để xem yêu thích.")),
+                  );
+                }
               },
             ),
             const Divider(),
@@ -275,6 +302,7 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   MaterialPageRoute(
+                    // 💡 TRUYỀN THÔNG TIN USER DƯỚI DẠNG ĐỐI SỐ CHO ProfileScreen
                     builder: (_) => const ProfileScreen(),
                     settings: RouteSettings(arguments: {'user': _user}),
                   ),
@@ -285,6 +313,10 @@ class _HomeScreenState extends State<HomeScreen> {
               leading: const Icon(Icons.logout, color: Colors.red),
               title: const Text('Đăng xuất', style: TextStyle(color: Colors.red)),
               onTap: () {
+                // Xóa UserModel khi đăng xuất
+                _user = null;
+                // Gọi setState để cập nhật UI ngay lập tức
+                setState(() {});
                 Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
               },
             ),
@@ -340,7 +372,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     Navigator.push(
                       context,
                       MaterialPageRoute(
-                        builder: (_) => EventDetailScreen(eventId: e.eventId!),
+                        builder: (_) => EventDetailScreen(
+                          eventId: e.eventId!,
+                          // ✅ TRUYỀN userId cho EventDetailScreen
+                          userId: _currentUserId,
+                        ),
                       ),
                     );
                   }

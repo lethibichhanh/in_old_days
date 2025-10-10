@@ -1,15 +1,73 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 
+// Đảm bảo file chứa class UserModel được import
+// import '../models/user_model.dart'; // Giả sử UserModel nằm ở đây
+
+// Do bạn đã cung cấp class UserModel, tôi sẽ đặt nó ở đây tạm thời:
+class UserModel {
+  final int? id;
+  final String username;
+  final String? fullname;
+  final String email;
+  final String passwordHash;
+  final String? avatar;
+
+  UserModel({
+    this.id,
+    required this.username,
+    required this.email,
+    required this.passwordHash,
+    this.fullname,
+    this.avatar,
+  });
+
+  // Chuyển sang Map (để insert/update) - Dùng tên cột DB
+  Map<String, dynamic> toDbMap() {
+    return {
+      'user_id': id,
+      'full_name': fullname, // Tên cột DB
+      'email': email,
+      'avatar_url': avatar, // Tên cột DB
+      'password_hash': passwordHash,
+      // Lưu ý: 'username' không được đưa vào đây nếu nó không phải là cột DB
+    };
+  }
+
+  // Copy (giữ nguyên, chỉ cập nhật tên trường nếu cần)
+  UserModel copyWith({
+    int? id,
+    String? username,
+    String? fullname,
+    String? email,
+    String? avatar,
+    String? passwordHash,
+  }) {
+    return UserModel(
+      id: id ?? this.id,
+      username: username ?? this.username,
+      fullname: fullname ?? this.fullname,
+      email: email ?? this.email,
+      avatar: avatar ?? this.avatar,
+      passwordHash: passwordHash ?? this.passwordHash,
+    );
+  }
+}
+
+// -----------------------------------------------------------
+
 class UpdateProfileScreen extends StatefulWidget {
-  const UpdateProfileScreen({super.key});
+  // 💡 SỬA: UserModel user được truyền qua constructor hoặc arguments
+  final UserModel? user;
+
+  const UpdateProfileScreen({super.key, this.user});
 
   @override
   State<UpdateProfileScreen> createState() => _UpdateProfileScreenState();
 }
 
 class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
-  Map<String, dynamic>? _user;
+  UserModel? _user;
 
   final _fullnameController = TextEditingController();
   final _emailController = TextEditingController();
@@ -19,23 +77,52 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
-    if (_user == null && args != null) {
-      _user = args['user'];
-      _fullnameController.text = _user?['fullname'] ?? '';
-      _emailController.text = _user?['email'] ?? '';
-      _avatarController.text = _user?['avatar'] ?? '';
+    // 1. Lấy user từ arguments (Cách truyền phổ biến)
+    if (_user == null) {
+      final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+      if (args != null && args['user'] is UserModel) {
+        _user = args['user'] as UserModel;
+      }
+    }
+
+    // 2. Lấy user từ constructor (Cách truyền tốt hơn)
+    if (_user == null && widget.user != null) {
+      _user = widget.user;
+    }
+
+    // Khởi tạo controllers sau khi có đối tượng _user
+    if (_user != null && _fullnameController.text.isEmpty) {
+      _fullnameController.text = _user!.fullname ?? '';
+      _emailController.text = _user!.email;
+      _avatarController.text = _user!.avatar ?? '';
     }
   }
 
+  @override
+  void dispose() {
+    _fullnameController.dispose();
+    _emailController.dispose();
+    _avatarController.dispose();
+    super.dispose();
+  }
+
   Future<void> _updateProfile() async {
-    if (_user == null) return;
+    // Kiểm tra user và ID (bắt buộc)
+    if (_user == null || _user!.id == null) {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text("⚠️ Lỗi hệ thống: Không có ID người dùng")),
+        );
+      }
+      return;
+    }
 
     final fullname = _fullnameController.text.trim();
     final email = _emailController.text.trim();
     final avatar = _avatarController.text.trim();
 
+    // Kiểm tra tính hợp lệ của dữ liệu đầu vào
     if (fullname.isEmpty || email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text("⚠️ Vui lòng nhập đầy đủ thông tin")),
@@ -53,17 +140,24 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     setState(() => _isLoading = true);
 
     try {
-      final updatedUser = {
-        "fullname": fullname,
-        "email": email,
-        "avatar": avatar,
-      };
+      // 💡 SỬA: Tạo đối tượng UserModel đã cập nhật
+      final updatedUserModel = _user!.copyWith(
+        fullname: fullname,
+        email: email,
+        avatar: avatar,
+      );
+
+      // 💡 SỬA: Chuyển đổi UserModel sang Map DB
+      final updatedDbMap = updatedUserModel.toDbMap();
+
+      // Chỉ giữ lại các trường cần UPDATE (loại bỏ id và username không cần thiết)
+      updatedDbMap.remove('user_id');
 
       final rows = await DBHelper.instance.update(
         "users",
-        updatedUser,
-        where: "id = ?",
-        whereArgs: [_user!['id']],
+        updatedDbMap,
+        where: "user_id = ?",
+        whereArgs: [_user!.id],
       );
 
       if (rows > 0) {
@@ -71,15 +165,13 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(content: Text("✅ Cập nhật thành công")),
           );
-          Navigator.pop(context, {
-            ..._user!,
-            ...updatedUser,
-          });
+          // 💡 SỬA: Trả về đối tượng UserModel đã được cập nhật
+          Navigator.pop(context, updatedUserModel);
         }
       } else {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("⚠️ Không tìm thấy người dùng")),
+            const SnackBar(content: Text("⚠️ Cập nhật không thành công (0 dòng bị ảnh hưởng)")),
           );
         }
       }
@@ -87,7 +179,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
       debugPrint("❌ Lỗi cập nhật profile: $e\n$st");
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("Lỗi cập nhật: $e")),
+          SnackBar(content: Text("Lỗi cập nhật: ${e.toString()}")),
         );
       }
     } finally {
@@ -99,10 +191,11 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
   Widget build(BuildContext context) {
     if (_user == null) {
       return const Scaffold(
-        body: Center(child: Text("❌ Không tìm thấy user")),
+        body: Center(child: Text("❌ Không tìm thấy user để cập nhật. Vui lòng thử lại.")),
       );
     }
 
+    // Phần giao diện giữ nguyên, chỉ sử dụng _user!
     return Scaffold(
       appBar: AppBar(
         title: const Text("Cập nhật thông tin"),

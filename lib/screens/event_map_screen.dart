@@ -15,7 +15,7 @@ class EventMapScreen extends StatefulWidget {
   final int? month;
   final int? day;
   final List<EventModel>? events;
-  final int? userId; // Dùng để truyền cho EventDetailScreen
+  final int? userId;
 
   const EventMapScreen({
     super.key,
@@ -43,42 +43,15 @@ class _EventMapScreenState extends State<EventMapScreen> {
 
   @override
   void dispose() {
-    // Luôn dọn dẹp controller
     _controller?.onSymbolTapped.clear();
-    _controller = null;
     super.dispose();
   }
 
-  /// 🧭 Lọc GeoJSON để loại bỏ các tỉnh trùng nhau (Giữ nguyên)
-  Map<String, dynamic> _filterDuplicateProvinceFeatures(Map<String, dynamic> geoJson) {
-    final features = geoJson['features'] as List<dynamic>? ?? [];
-    final Map<String, dynamic> uniqueFeatures = {};
-    final Set<String> uniqueNames = {};
-
-    for (final feature in features) {
-      if (feature is Map<String, dynamic> && feature['properties'] is Map<String, dynamic>) {
-        final name = feature['properties']['ten_tinh'] ?? feature['properties']['name'];
-        if (name != null && name is String && !uniqueNames.contains(name)) {
-          uniqueNames.add(name);
-          uniqueFeatures[name] = feature;
-        }
-      }
-    }
-
-    return {
-      'type': 'FeatureCollection',
-      'name': geoJson['name'] ?? 'Vietnam',
-      'features': uniqueFeatures.values.toList(),
-    };
-  }
-
-  /// 📦 Load sự kiện từ DB (Giữ nguyên)
+  /// 📦 Load sự kiện từ DB
   Future<void> _loadEvents() async {
-    List<EventModel> events = [];
+    List<EventModel> events = widget.events ?? [];
 
-    if (widget.events != null) {
-      events = widget.events!;
-    } else {
+    if (widget.events == null) {
       List<Map<String, dynamic>> rawData;
       if (widget.month == null) {
         rawData = await DBHelper.eventsOfYear(widget.year);
@@ -98,232 +71,116 @@ class _EventMapScreenState extends State<EventMapScreen> {
       }
     }
 
-    // Lọc các sự kiện có tọa độ hợp lệ
     _events = events.where((e) => e.latitude != null && e.longitude != null && e.eventId != null).toList();
     _events.sort((a, b) => a.eventId!.compareTo(b.eventId!));
-
-    debugPrint("Đã tải ${_events.length} sự kiện có vị trí hợp lệ.");
 
     setState(() => _loading = false);
   }
 
-  /// 🖼️ Tải ảnh marker từ assets
-  Future<Uint8List?> _loadImageFromAssets(String relativePath) async {
-    try {
-      String path = relativePath.replaceAll("\\", "/").replaceAll('-', '_');
+  /// 🖼️ Tải và resize marker icon mặc định MỘT LẦN
+  Future<Uint8List> _loadDefaultMarkerImage() async {
+    final data = await rootBundle.load('assets/marker.png');
+    final bytes = data.buffer.asUint8List();
+    final decoded = img.decodeImage(bytes);
 
-      if (!path.startsWith('assets/')) {
-        path = 'assets/Image/$path';
-      }
+    // Resize ảnh về kích thước 80x80 để tăng tính ổn định
+    if (decoded != null) {
+      final resized = img.copyResize(decoded, width: 80, height: 80);
+      return Uint8List.fromList(img.encodePng(resized));
+    }
+    return bytes;
+  }
 
-      List<String> candidates = [];
-      if (path.endsWith(".png") || path.endsWith(".jpg") || path.endsWith(".jpeg")) {
-        candidates.add(path);
-      } else {
-        candidates.add("$path.png");
-        candidates.add("$path.jpg");
-      }
-
-      for (var p in candidates) {
-        try {
-          final data = await rootBundle.load(p);
-          final bytes = data.buffer.asUint8List();
-          final decoded = img.decodeImage(bytes);
-          if (decoded != null) {
-            // ✅ GIẢM KÍCH THƯỚC: Resize ảnh marker về kích thước nhỏ hơn (ví dụ 60x60) để tăng tính ổn định
-            final resized = img.copyResize(decoded, width: 60, height: 60);
-            return Uint8List.fromList(img.encodePng(resized));
-          }
-        } catch (_) {
-          // Tiếp tục thử ứng viên tiếp theo
+  /// 🧭 Lọc GeoJSON để loại bỏ các tỉnh trùng nhau
+  Map<String, dynamic> _filterDuplicateProvinceFeatures(Map<String, dynamic> geoJson) {
+    final features = geoJson['features'] as List<dynamic>? ?? [];
+    final Map<String, dynamic> uniqueFeatures = {};
+    final Set<String> uniqueNames = {};
+    for (final feature in features) {
+      if (feature is Map<String, dynamic> && feature['properties'] is Map<String, dynamic>) {
+        final name = feature['properties']['ten_tinh'] ?? feature['properties']['name'];
+        if (name != null && name is String && !uniqueNames.contains(name)) {
+          uniqueNames.add(name);
+          uniqueFeatures[name] = feature;
         }
       }
-
-      return null;
-    } catch (e) {
-      debugPrint("⚠️ Không thể tải ảnh $relativePath: $e");
-      return null;
     }
+    return {
+      'type': 'FeatureCollection',
+      'name': geoJson['name'] ?? 'Vietnam',
+      'features': uniqueFeatures.values.toList(),
+    };
   }
 
-  /// 📌 Ảnh mặc định khi không có ảnh sự kiện
-  Future<Uint8List> _loadFallbackAsset() async {
-    try {
-      final byteData = await rootBundle.load('assets/marker.png');
-      final bytes = byteData.buffer.asUint8List();
-      final decoded = img.decodeImage(bytes);
-      if (decoded != null) {
-        // ✅ GIẢM KÍCH THƯỚC: Resize ảnh marker về kích thước nhỏ hơn (ví dụ 60x60)
-        final resized = img.copyResize(decoded, width: 60, height: 60);
-        return Uint8List.fromList(img.encodePng(resized));
-      }
-      return Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 105, 203, 61, 19, 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 100, 12, 0, 0, 0, 130, 0, 1, 0, 2, 0, 1, 103, 63, 107, 73, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
-    } catch (e) {
-      debugPrint("⚠️ Lỗi tải ảnh fallback: $e");
-      return Uint8List.fromList([137, 80, 78, 71, 13, 10, 26, 10, 0, 0, 0, 13, 73, 72, 68, 82, 0, 0, 0, 1, 0, 0, 0, 1, 8, 2, 0, 0, 0, 105, 203, 61, 19, 0, 0, 0, 13, 73, 68, 65, 84, 8, 215, 99, 100, 12, 0, 0, 0, 130, 0, 1, 0, 2, 0, 1, 103, 63, 107, 73, 0, 0, 0, 0, 73, 69, 78, 68, 174, 66, 96, 130]);
-    }
-  }
-
-  /// 🗺️ Thêm lớp bản đồ Việt Nam (CHỈ GIỮ LẠI OUTLINE VÀ LABEL)
+  /// 🗺️ Thêm lớp bản đồ Việt Nam
   Future<void> _addProvinceLayers() async {
     if (_controller == null) return;
-
     const sourceId = 'vn-provinces-source';
-    final candidateFiles = ['assets/vn.json'];
-
     Map<String, dynamic>? geoJson;
-
-    for (final path in candidateFiles) {
-      try {
-        final data = await rootBundle.loadString(path);
-        geoJson = jsonDecode(data);
-        break;
-      } catch (_) {}
-    }
-
-    if (geoJson == null) {
-      debugPrint("⚠️ Không tìm thấy file GeoJSON trong assets/");
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(const SnackBar(
-          content: Text('⚠️ Thiếu file bản đồ Việt Nam trong assets/'),
-        ));
-      }
+    try {
+      final data = await rootBundle.loadString('assets/vn.json');
+      geoJson = jsonDecode(data);
+    } catch (_) {
+      debugPrint("⚠️ Không tìm thấy file GeoJSON trong assets/vn.json");
       return;
     }
 
+    if (geoJson == null) return;
     final filtered = _filterDuplicateProvinceFeatures(geoJson);
-
     await _controller!.addGeoJsonSource(sourceId, filtered);
 
-    // ✅ Giữ lại: Lớp đường ranh giới
-    await _controller!.addLineLayer(
-      sourceId,
-      'vn-outline',
-      maplibre.LineLayerProperties(
-        lineColor: '#006666',
-        lineWidth: 1.2,
-      ),
-    );
-
-    // ✅ Giữ lại: Lớp tên tỉnh
-    await _controller!.addSymbolLayer(
-      sourceId,
-      'vn-label',
-      maplibre.SymbolLayerProperties(
-        textField: ['get', 'ten_tinh'],
-        textSize: 10,
-        textColor: '#222222',
-        textHaloColor: '#FFFFFF',
-        textHaloWidth: 1.2,
-        symbolPlacement: 'point',
-        textAllowOverlap: false,
-        textIgnorePlacement: false,
-        textOpacity: [
-          'interpolate',
-          ['linear'],
-          ['zoom'],
-          4,
-          0.0,
-          5,
-          0.8,
-          6,
-          1.0
-        ],
-      ),
-    );
+    // Lớp đường ranh giới
+    await _controller!.addLineLayer(sourceId, 'vn-outline', maplibre.LineLayerProperties(lineColor: '#006666', lineWidth: 1.2,));
+    // Lớp tên tỉnh
+    await _controller!.addSymbolLayer(sourceId, 'vn-label', maplibre.SymbolLayerProperties(
+      textField: ['get', 'ten_tinh'],
+      textSize: 10,
+      textColor: '#222222',
+      textHaloColor: '#FFFFFF',
+      textHaloWidth: 1.2,
+      symbolPlacement: 'point',
+      textAllowOverlap: false,
+      textIgnorePlacement: false,
+      textOpacity: ['interpolate', ['linear'], ['zoom'], 4, 0.0, 5, 0.8, 6, 1.0],
+    ));
   }
 
-  /// 📌 Thêm lớp Symbols cho Sự kiện
-  Future<void> _addEventSymbolsLayer() async {
+
+  /// 📌 Thêm Symbol cho từng Sự kiện (Sử dụng addSymbol)
+  Future<void> _addEventSymbols() async {
     if (_controller == null || _events.isEmpty) return;
 
-    const sourceId = 'event-points-source';
-    const layerId = 'event-markers-layer';
-    final List<Map<String, dynamic>> features = [];
+    final markerBytes = await _loadDefaultMarkerImage();
+    const defaultIconId = "default-event-marker";
 
-    // 1. Xóa Source/Layer cũ nếu có để tránh trùng lặp
     try {
-      await _controller!.removeLayer(layerId);
-      await _controller!.removeSource(sourceId);
-    } catch (_) {
-      // Bỏ qua nếu chưa tồn tại
-    }
-
-    // 2. Chuẩn bị GeoJSON Features và tải hình ảnh
-    for (final e in _events) {
-      if (e.eventId == null || e.latitude == null || e.longitude == null) continue;
-
-      try {
-        final iconId = 'marker-${e.eventId}';
-        Uint8List? markerBytes =
-        (e.imageUrl != null && e.imageUrl!.isNotEmpty)
-            ? await _loadImageFromAssets(e.imageUrl!)
-            : null;
-        markerBytes ??= await _loadFallbackAsset();
-
-        // Thêm hình ảnh/icon trước
-        if (markerBytes != null) {
-          try {
-            await _controller!.addImage(iconId, markerBytes);
-          } catch (e) {
-            debugPrint("❌ Lỗi đăng ký Image $iconId: $e");
-            continue;
-          }
-        } else {
-          debugPrint("❌ KHÔNG TẢI ĐƯỢC FALLBACK HOẶC IMAGE cho sự kiện ID: ${e.eventId}");
-          continue;
-        }
-
-        features.add({
-          'type': 'Feature',
-          'geometry': {
-            'type': 'Point',
-            'coordinates': [e.longitude!, e.latitude!]
-          },
-          'properties': {
-            // Key này rất quan trọng cho onSymbolTapped
-            'eventId': e.eventId.toString(),
-            'iconId': iconId,
-            'title': e.title ?? '',
-          },
-        });
-      } catch (ex) {
-        debugPrint("❌ Lỗi chuẩn bị GeoJSON cho ${e.title}: $ex");
-      }
-    }
-
-    if (features.isEmpty) {
-      debugPrint("⚠️ KHÔNG CÓ FEATURE NÀO HỢP LỆ để thêm vào bản đồ.");
+      // Thêm ảnh marker MỘT LẦN VÀO BẢN ĐỒ
+      await _controller!.addImage(defaultIconId, markerBytes);
+    } catch (e) {
+      debugPrint("❌ Lỗi đăng ký Image mặc định: $e");
       return;
     }
 
-    final geoJson = {
-      'type': 'FeatureCollection',
-      'features': features,
-    };
+    // Thêm từng Symbol
+    for (final e in _events) {
+      if (e.latitude == null || e.longitude == null || e.eventId == null) continue;
 
-    // 3. Thêm nguồn dữ liệu GeoJSON
-    await _controller!.addGeoJsonSource(sourceId, geoJson);
-    debugPrint("✅ Thêm GeoJSON Source với ${features.length} features.");
-
-    // 4. Thêm Symbol Layer.
-    await _controller!.addSymbolLayer(
-      sourceId,
-      layerId,
-      maplibre.SymbolLayerProperties(
-        iconImage: ['get', 'iconId'],
-        // 🚀 Tăng iconSize lên 2.0 để mở rộng vùng chạm (hitbox)
-        iconSize: 2.0,
-        iconAllowOverlap: true,
-        iconIgnorePlacement: true,
-      ),
-    );
-
-    debugPrint("✅ Thêm lớp sự kiện Symbols xong.");
+      await _controller!.addSymbol(
+        maplibre.SymbolOptions(
+          geometry: maplibre.LatLng(e.latitude!, e.longitude!),
+          iconImage: defaultIconId,
+          // Tăng iconSize để mở rộng vùng chạm (hitbox) và dễ bấm hơn
+          iconSize: 2.5,
+        ),
+        // Dữ liệu cho Symbol Tapped
+        {"eventId": e.eventId.toString()},
+      );
+    }
+    debugPrint("✅ Đã thêm ${_events.length} symbols.");
   }
 
 
-  /// 🗺️ Tự động xác định vùng zoom theo sự kiện (Giữ nguyên)
+  /// 🗺️ Tự động xác định vùng zoom theo sự kiện
   maplibre.LatLngBounds _calculateBounds() {
     if (_events.isEmpty) {
       return maplibre.LatLngBounds(
@@ -354,69 +211,40 @@ class _EventMapScreenState extends State<EventMapScreen> {
   Future<void> _onMapCreated(maplibre.MaplibreMapController controller) async {
     _controller = controller;
 
-    // 1. Thêm các lớp Bản đồ Việt Nam
     await _addProvinceLayers();
 
-    // 2. Thêm các Marker Sự kiện.
-    await _addEventSymbolsLayer();
+    // Thêm các Marker Sự kiện
+    await _addEventSymbols();
 
-    // 3. Tự zoom
+    // Tự zoom
     final bounds = _calculateBounds();
     if (_events.isNotEmpty) {
-      // Đã tăng padding để tránh bị che bởi AppBar
       await _controller!.animateCamera(maplibre.CameraUpdate.newLatLngBounds(bounds,
           top: 150, bottom: 200, left: 50, right: 50));
     }
 
-    // 🚀 Xử lý chạm Marker (Symbol) - Vị trí của sự kiện chạm
+    // Xử lý chạm Marker (Symbol)
     _controller!.onSymbolTapped.add((symbol) {
-
-      // ✨ DEBUGGING MỚI: Luôn log để xác nhận sự kiện chạm có được kích hoạt không
-      debugPrint("=========================================");
-      debugPrint("✨ SỰ KIỆN CHẠM MARKER ĐÃ ĐƯỢC KÍCH HOẠT!");
-      debugPrint("✨ Dữ liệu Marker: ${symbol.data}");
-      debugPrint("=========================================");
-
       final raw = symbol.data?["eventId"];
-      if (raw == null) {
-        debugPrint("⚠️ Lỗi: Không tìm thấy 'eventId' trong dữ liệu marker.");
-        return;
-      }
+
+      if (raw == null) return;
 
       // Đảm bảo eventId là kiểu int
       int? eid = raw is String ? int.tryParse(raw) : (raw is int ? raw : null);
 
-      if (eid == null) {
-        debugPrint("⚠️ Không thể parse event ID: $raw");
-        return;
-      }
+      if (eid == null) return;
 
-      debugPrint("✅ Đã lấy được Event ID: $eid. Đang tìm sự kiện...");
-
-      // Dùng indexWhere để tìm kiếm hiệu quả và an toàn hơn
       final eventIndex = _events.indexWhere((ev) => ev.eventId == eid);
 
       if (eventIndex != -1) {
         final event = _events[eventIndex];
-        debugPrint("✅ Tìm thấy sự kiện: ${event.title} (ID: $eid). BẮT ĐẦU ĐIỀU HƯỚNG.");
-
         if (mounted) {
-          // **Thực hiện điều hướng**
           Navigator.push(
             context,
             MaterialPageRoute(
-              // Truyền eventId và userId
               builder: (context) => EventDetailScreen(eventId: event.eventId!, userId: widget.userId),
             ),
           );
-        }
-      } else {
-        // Thông báo nếu không tìm thấy sự kiện
-        debugPrint("❌ KHÔNG TÌM THẤY sự kiện ID $eid trong danh sách ${_events.length} sự kiện đã tải.");
-        if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(SnackBar(
-            content: Text('Không tìm thấy dữ liệu sự kiện $eid!'),
-          ));
         }
       }
     });

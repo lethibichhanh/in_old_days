@@ -1,5 +1,10 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
+import '../l10n/app_localizations.dart';
+import '../main.dart';
+import '../models/user_model.dart';
+
+enum AppLanguage { vi, en, zh }
 
 class LoginScreen extends StatefulWidget {
   const LoginScreen({super.key});
@@ -14,14 +19,17 @@ class _LoginScreenState extends State<LoginScreen> {
   bool _obscurePwd = true;
   bool _isLoading = false;
 
-  /// ================== HÀM ĐĂNG NHẬP ==================
+  String _getText(String key) {
+    return AppLocalizations.of(context)?.translate(key) ?? key;
+  }
+
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Vui lòng nhập Email và Mật khẩu")),
+        SnackBar(content: Text(_getText('snack_empty'))),
       );
       return;
     }
@@ -29,36 +37,29 @@ class _LoginScreenState extends State<LoginScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // ✅ FIX LỖI: DBHelper.authenticateUser trả về Map<String, dynamic>?
-      // Ta lưu kết quả vào userMap.
       final userMap = await DBHelper.authenticateUser(email, password);
 
-      // ✅ Kiểm tra nếu userMap KHÔNG phải là null (đăng nhập thành công)
       if (userMap != null) {
-        // LƯU Ý: Không cần gọi DBHelper.getUserByEmail(email) nữa
-        // vì userMap đã chứa dữ liệu người dùng được trả về.
-
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("🎉 Đăng nhập thành công!")),
+          SnackBar(content: Text(_getText('snack_success'))),
         );
 
-        // ✅ Điều hướng đến HomeScreen, truyền userMap (dữ liệu người dùng)
         Navigator.pushReplacementNamed(
           context,
           '/home',
-          arguments: {'user': userMap}, // Dùng userMap thay vì gọi getUserByEmail
+          arguments: {'user': userMap},
         );
       } else {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("❌ Sai Email hoặc Mật khẩu")),
+          SnackBar(content: Text(_getText('snack_error_auth'))),
         );
       }
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Lỗi đăng nhập: $e")),
+          SnackBar(content: Text("${_getText('snack_error_general')} $e")),
         );
       }
     } finally {
@@ -66,11 +67,70 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
+  // 🔹 Chuyển ngôn ngữ (fix cú pháp switch expression)
+  void _changeLanguage(AppLanguage newLanguage) {
+    String code = 'en'; // Mặc định tiếng Anh
+
+    switch (newLanguage) {
+      case AppLanguage.vi:
+        code = 'vi';
+        break;
+      case AppLanguage.en:
+        code = 'en';
+        break;
+      case AppLanguage.zh:
+        code = 'zh';
+        break;
+    }
+
+    InOldDaysApp.setLocale(context, Locale(code));
+  }
+
+  @override
+  void dispose() {
+    _emailController.dispose();
+    _passwordController.dispose();
+    super.dispose();
+  }
+
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tr = AppLocalizations.of(context);
+
+    if (tr == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
+      appBar: AppBar(
+        title: Text(tr.translate('language')),
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        actions: [
+          PopupMenuButton<AppLanguage>(
+            onSelected: _changeLanguage,
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: AppLanguage.vi,
+                child: Text('🇻🇳 Tiếng Việt'),
+              ),
+              PopupMenuItem(
+                value: AppLanguage.en,
+                child: Text('🇺🇸 English'),
+              ),
+              PopupMenuItem(
+                value: AppLanguage.zh,
+                child: Text('🇨🇳 中文'),
+              ),
+            ],
+            icon: const Icon(Icons.language, color: Colors.white),
+          ),
+        ],
+      ),
+      extendBodyBehindAppBar: true,
       body: Container(
         decoration: const BoxDecoration(
           gradient: LinearGradient(
@@ -105,7 +165,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 20),
                     Text(
-                      "Chào mừng bạn trở lại!",
+                      tr.translate('welcome'),
                       style: theme.textTheme.headlineSmall?.copyWith(
                         fontWeight: FontWeight.bold,
                         color: theme.colorScheme.primary,
@@ -113,13 +173,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 30),
 
-                    // 🔹 Email
+                    // Email
                     TextField(
                       controller: _emailController,
                       keyboardType: TextInputType.emailAddress,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.email_outlined),
-                        labelText: "Email",
+                        labelText: tr.translate('email'),
                         filled: true,
                         fillColor: Colors.grey.shade100,
                         border: OutlineInputBorder(
@@ -130,13 +190,13 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 16),
 
-                    // 🔹 Mật khẩu
+                    // Password
                     TextField(
                       controller: _passwordController,
                       obscureText: _obscurePwd,
                       decoration: InputDecoration(
                         prefixIcon: const Icon(Icons.lock_outline),
-                        labelText: "Mật khẩu",
+                        labelText: tr.translate('password'),
                         filled: true,
                         fillColor: Colors.grey.shade100,
                         border: OutlineInputBorder(
@@ -156,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                     const SizedBox(height: 25),
 
-                    // 🔹 Nút đăng nhập
+                    // Login button
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton(
@@ -178,42 +238,39 @@ class _LoginScreenState extends State<LoginScreen> {
                             strokeWidth: 2,
                           ),
                         )
-                            : const Text(
-                          "Đăng nhập",
-                          style: TextStyle(
-                            fontSize: 16,
-                            color: Colors.white,
-                          ),
+                            : Text(
+                          tr.translate('login_button'),
+                          style: const TextStyle(
+                              fontSize: 16, color: Colors.white),
                         ),
                       ),
                     ),
                     const SizedBox(height: 16),
 
-                    // 🔹 Quên mật khẩu
+                    // Forgot password
                     TextButton(
                       onPressed: () {
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              "⚠️ Chức năng quên mật khẩu đang được phát triển",
-                            ),
-                          ),
+                          SnackBar(
+                              content:
+                              Text(tr.translate('snack_forgot_dev'))),
                         );
                       },
-                      child: const Text(
-                        "Quên mật khẩu?",
-                        style: TextStyle(color: Colors.grey),
+                      child: Text(
+                        tr.translate('forgot_password'),
+                        style: const TextStyle(color: Colors.grey),
                       ),
                     ),
 
-                    // 🔹 Chuyển sang đăng ký
+                    // Register
                     TextButton(
                       onPressed: () {
                         Navigator.pushNamed(context, '/register');
                       },
-                      child: const Text(
-                        "Chưa có tài khoản? Đăng ký ngay",
-                        style: TextStyle(color: Colors.blueAccent),
+                      child: Text(
+                        tr.translate('no_account'),
+                        style:
+                        const TextStyle(color: Colors.blueAccent),
                       ),
                     ),
                   ],

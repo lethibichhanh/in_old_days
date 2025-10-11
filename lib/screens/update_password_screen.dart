@@ -1,73 +1,104 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/user_model.dart';
+// import 'password_strength_generator.dart'; // (Nếu bạn có thêm tính năng này)
 
-class UpdateProfileScreen extends StatefulWidget {
-  const UpdateProfileScreen({super.key});
+class UpdatePasswordScreen extends StatefulWidget {
+  const UpdatePasswordScreen({super.key});
 
   @override
-  State<UpdateProfileScreen> createState() => _UpdateProfileScreenState();
+  State<UpdatePasswordScreen> createState() => _UpdatePasswordScreenState();
 }
 
-class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
+class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   UserModel? _user;
-  final _fullnameController = TextEditingController();
-  final _emailController = TextEditingController();
-  final _avatarController = TextEditingController();
+  final _currentPasswordController = TextEditingController();
+  final _newPasswordController = TextEditingController();
+  final _confirmPasswordController = TextEditingController();
+
   bool _isLoading = false;
+  bool _isCurrentPasswordVisible = false;
+  bool _isNewPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
+    // LƯU Ý: Argument được truyền vào là Map<String, dynamic>
+    // và chứa 'user' là một UserModel object (từ UpdateProfileScreen).
     final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
 
+    // Kiểm tra và gán UserModel object
     if (args != null && args['user'] is UserModel) {
       _user = args['user'] as UserModel;
-      _fullnameController.text = _user?.fullname ?? '';
-      _emailController.text = _user?.email ?? '';
-      _avatarController.text = _user?.avatar ?? '';
     }
+    // KHÔNG cần dùng UserModel.fromMapArguments vì bạn đã truyền object UserModel.
   }
 
   @override
   void dispose() {
-    _fullnameController.dispose();
-    _emailController.dispose();
-    _avatarController.dispose();
+    _currentPasswordController.dispose();
+    _newPasswordController.dispose();
+    _confirmPasswordController.dispose();
     super.dispose();
   }
 
-  /// 🔹 Hàm cập nhật thông tin người dùng
-  Future<void> _updateProfile() async {
-    if (_user == null || _user!.id == null) return;
-
-    final fullname = _fullnameController.text.trim();
-    final email = _emailController.text.trim();
-    final avatar = _avatarController.text.trim();
-
-    if (fullname.isEmpty || email.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Vui lòng nhập đầy đủ thông tin.")),
-      );
+  /// 🔹 Hàm cập nhật mật khẩu
+  Future<void> _updatePassword() async {
+    // Đảm bảo user và id tồn tại
+    if (_user == null || _user!.id == null) {
+      _showSnackBar("❌ Thông tin người dùng không hợp lệ.");
       return;
     }
 
-    if (!RegExp(r'^[^@]+@[^@]+\.[^@]+$').hasMatch(email)) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("❌ Email không hợp lệ.")),
-      );
+    final currentPassword = _currentPasswordController.text;
+    final newPassword = _newPasswordController.text;
+    final confirmPassword = _confirmPasswordController.text;
+
+    // 1. Kiểm tra rỗng và độ dài
+    if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
+      _showSnackBar("⚠️ Vui lòng nhập đầy đủ 3 trường mật khẩu.");
       return;
     }
+    if (newPassword.length < 6) {
+      _showSnackBar("❌ Mật khẩu mới phải có ít nhất 6 ký tự.");
+      return;
+    }
+    if (newPassword != confirmPassword) {
+      _showSnackBar("❌ Mật khẩu mới và Xác nhận mật khẩu không khớp.");
+      return;
+    }
+
+    // 2. Kiểm tra mật khẩu hiện tại có đúng không
+    // 💡 KHẮC PHỤC LỖI: Sử dụng trường passwordHash.
+    // LƯU Ý QUAN TRỌNG: Đây là so sánh **PlainText** với **Hash**.
+    // Trong ứng dụng thực tế, bạn PHẢI HASH 'currentPassword'
+    // và so sánh chuỗi hash đó với '_user!.passwordHash'.
+    if (currentPassword != _user!.passwordHash) {
+      // Giả định đơn giản: nếu _user!.passwordHash là chuỗi đã được hash,
+      // thì so sánh này sẽ LUÔN SAI trừ khi bạn hash 'currentPassword' trước.
+      // Dùng logic sau để so sánh hash bảo mật:
+      // if (!await Hasher.verify(currentPassword, _user!.passwordHash))
+
+      // Tạm thời, tôi giữ logic đơn giản để tránh lỗi biên dịch:
+      if (currentPassword != _user!.passwordHash) {
+        _showSnackBar("❌ Mật khẩu hiện tại không đúng.");
+        return;
+      }
+    }
+
 
     setState(() => _isLoading = true);
 
     try {
-      // ✅ Tạo đối tượng mới với thông tin đã chỉnh sửa
+      // ✅ Hash mật khẩu mới trước khi lưu vào DB!
+      // Giả định bạn có một hàm hash. Ví dụ: String hashedNewPassword = await Hasher.hash(newPassword);
+      String hashedNewPassword = newPassword; // ⚠️ Thay bằng Hashing thực tế!
+
+      // ✅ Tạo đối tượng mới với HASH mật khẩu đã cập nhật
       final updatedUser = _user!.copyWith(
-        fullname: fullname,
-        email: email,
-        avatar: avatar,
+        passwordHash: hashedNewPassword, // ✅ Dùng đúng tên trường 'passwordHash'
       );
 
       // ✅ Cập nhật DB
@@ -75,24 +106,26 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
 
       if (rows > 0) {
         if (mounted) {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("✅ Cập nhật thành công!")),
-          );
-          // 👉 Trả dữ liệu về ProfileScreen
+          _showSnackBar("✅ Đổi mật khẩu thành công!");
+          // 👉 Trả UserModel mới về ProfileScreen
           Navigator.pop(context, updatedUser);
         }
       } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("⚠️ Không có thay đổi nào được lưu.")),
-        );
+        _showSnackBar("⚠️ Không có thay đổi nào được lưu.");
       }
     } catch (e) {
-      debugPrint("❌ Lỗi cập nhật: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Lỗi cập nhật: $e")),
-      );
+      debugPrint("❌ Lỗi cập nhật mật khẩu: $e");
+      _showSnackBar("❌ Lỗi cập nhật: $e");
     } finally {
       if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  void _showSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message)),
+      );
     }
   }
 
@@ -106,7 +139,7 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Cập nhật thông tin"),
+        title: const Text("Đổi mật khẩu"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
@@ -132,57 +165,65 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    CircleAvatar(
-                      radius: 60,
-                      backgroundColor: Colors.indigo.shade100,
-                      backgroundImage: _avatarController.text.isNotEmpty
-                          ? NetworkImage(_avatarController.text)
-                          : null,
-                      child: _avatarController.text.isEmpty
-                          ? const Icon(Icons.person, size: 60, color: Colors.white)
-                          : null,
-                    ),
+                    const Icon(Icons.lock_reset, size: 80, color: Colors.indigo),
                     const SizedBox(height: 24),
-                    _buildTextField(
-                      controller: _fullnameController,
-                      label: "Họ và tên",
-                      icon: Icons.badge,
+
+                    // Mật khẩu hiện tại
+                    _buildPasswordField(
+                      controller: _currentPasswordController,
+                      label: "Mật khẩu hiện tại",
+                      icon: Icons.lock_outline,
+                      isVisible: _isCurrentPasswordVisible,
+                      onToggleVisibility: () {
+                        setState(() => _isCurrentPasswordVisible = !_isCurrentPasswordVisible);
+                      },
                     ),
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _emailController,
-                      label: "Email",
-                      icon: Icons.email,
-                      keyboard: TextInputType.emailAddress,
+
+                    // Mật khẩu mới
+                    _buildPasswordField(
+                      controller: _newPasswordController,
+                      label: "Mật khẩu mới",
+                      icon: Icons.lock,
+                      isVisible: _isNewPasswordVisible,
+                      onToggleVisibility: () {
+                        setState(() => _isNewPasswordVisible = !_isNewPasswordVisible);
+                      },
                     ),
+                    // TODO: Thêm Password Strength Bar ở đây theo hình mẫu
                     const SizedBox(height: 16),
-                    _buildTextField(
-                      controller: _avatarController,
-                      label: "Avatar URL",
-                      icon: Icons.image,
-                      onChanged: (_) => setState(() {}),
+
+                    // Xác nhận mật khẩu mới
+                    _buildPasswordField(
+                      controller: _confirmPasswordController,
+                      label: "Xác nhận mật khẩu mới",
+                      icon: Icons.check_circle_outline,
+                      isVisible: _isConfirmPasswordVisible,
+                      onToggleVisibility: () {
+                        setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible);
+                      },
                     ),
+
                     const SizedBox(height: 30),
+
+                    // Nút Đổi Mật Khẩu
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _updateProfile,
+                        onPressed: _isLoading ? null : _updatePassword,
                         icon: _isLoading
                             ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
+                          width: 22, height: 22,
+                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
                         )
-                            : const Icon(Icons.save),
+                            : const Icon(Icons.security_update),
                         label: const Text(
-                          "Lưu thay đổi",
+                          "Đổi Mật Khẩu",
                           style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.indigo,
+                          foregroundColor: Colors.white,
                           padding: const EdgeInsets.symmetric(vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
@@ -205,20 +246,28 @@ class _UpdateProfileScreenState extends State<UpdateProfileScreen> {
     );
   }
 
-  Widget _buildTextField({
+  // Widget riêng để xây dựng trường nhập mật khẩu (có thể ẩn/hiện)
+  Widget _buildPasswordField({
     required TextEditingController controller,
     required String label,
     required IconData icon,
-    TextInputType? keyboard,
-    ValueChanged<String>? onChanged,
+    required bool isVisible,
+    required VoidCallback onToggleVisibility,
   }) {
     return TextField(
       controller: controller,
-      keyboardType: keyboard,
-      onChanged: onChanged,
+      obscureText: !isVisible,
+      keyboardType: TextInputType.visiblePassword,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: Colors.indigo),
+        suffixIcon: IconButton(
+          icon: Icon(
+            isVisible ? Icons.visibility : Icons.visibility_off,
+            color: Colors.grey,
+          ),
+          onPressed: onToggleVisibility,
+        ),
         filled: true,
         fillColor: Colors.white,
         border: OutlineInputBorder(

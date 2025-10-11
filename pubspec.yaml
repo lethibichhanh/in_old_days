@@ -10,9 +10,13 @@ dependencies:
   flutter:
     sdk: flutter
 
+  flutter_localizations:
+    sdk: flutter
+
   # 🧩 Giao diện cơ bản
   cupertino_icons: ^1.0.8
   crypto: ^3.0.3
+
   # 🧩 Làm việc với file, DB cục bộ
   path_provider: ^2.1.2
   sqflite: ^2.3.3
@@ -32,7 +36,7 @@ dependencies:
   flutter_animate: ^4.5.0
 
   # 🖼️ Thư viện xử lý ảnh (cần thiết cho _loadImageFromAssets trong EventMapScreen)
-  image: ^4.2.0 # Đảm bảo thư viện này có trong dependencies
+  image: ^4.2.0
 
 dev_dependencies:
   flutter_test:
@@ -53,6 +57,7 @@ flutter:
     - assets/marker.png
 
     # 🗺️ GeoJSON bản đồ Việt Nam
-    - assets/vn.json # 🟢 ĐÃ THÊM
+    - assets/vn.json
 
-# Vui lòng chạy lệnh 'flutter pub get' sau khi cập nhật file này.
+    # 🌐 File đa ngôn ngữ
+    - assets/lang/

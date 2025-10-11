@@ -14,7 +14,7 @@ class DBHelper {
   static Database? _db;
   static const _dbName = "in_old_days.db";
   // ✅ Tăng version lên 16 để đảm bảo các thay đổi schema (thêm role/avatar_url) được áp dụng
-  static const _dbVersion = 18;
+  static const _dbVersion = 21;
 
   // ================== INITIALIZATION ==================
   static Future<void> prepareDatabaseFromAssets() async {
@@ -413,7 +413,7 @@ class DBHelper {
 
   static Future<void> debugPrintAllImages() async {
     final db = await database;
-    final res = await db.rawQuery("SELECT event_id, image_url FROM events LIMIT 20");
+    final res = await db.rawQuery("SELECT event_id, image_url FROM events LIMIT 50");
     for (var row in res) {
       debugPrint("📷 Event ${row['event_id']}: ${row['image_url']}");
     }

@@ -192,20 +192,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 ),
                 const SizedBox(height: 20),
 
-                // 📚 Về trang chính (Ôn tập)
-                _buildActionButton(
-                  label: "Về trang chính (Ôn tập)",
-                  icon: Icons.school,
-                  color: Colors.indigo,
-                  onPressed: () {
-                    Navigator.pushReplacementNamed(
-                      context,
-                      '/topics',
-                      arguments: {'user': _user},
-                    );
-                  },
-                ),
-                const SizedBox(height: 12),
 
                 // 🚪 Đăng xuất
                 _buildActionButton(

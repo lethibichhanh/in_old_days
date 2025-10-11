@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
+import '../l10n/app_localizations.dart';
+import '../main.dart';
 
 class RegisterScreen extends StatefulWidget {
   const RegisterScreen({super.key});
@@ -28,6 +30,8 @@ class _RegisterScreenState extends State<RegisterScreen> {
   }
 
   Future<void> _register() async {
+    final tr = AppLocalizations.of(context)!;
+
     if (!_formKey.currentState!.validate()) return;
 
     final username = _usernameController.text.trim();
@@ -38,7 +42,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 🔍 Kiểm tra xem email đã tồn tại chưa
+      // 🔍 Kiểm tra email đã tồn tại
       final exists = await DBHelper.rawQuery(
         "SELECT user_id FROM users WHERE email = ?",
         [email],
@@ -47,11 +51,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
       if (exists.isNotEmpty) {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("❌ Email này đã được đăng ký")),
+            SnackBar(content: Text(tr.translate('error_email_exists'))),
           );
         }
       } else {
-        // ✅ Thêm người dùng mới (KHÔNG CHÈN user_id vì AUTOINCREMENT)
+        // ✅ Thêm người dùng mới
         await DBHelper.insert("users", {
           "email": email,
           "password_hash": password,
@@ -65,7 +69,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
         if (!mounted) return;
 
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("🎉 Đăng ký thành công! Vui lòng đăng nhập.")),
+          SnackBar(content: Text(tr.translate('register_success'))),
         );
 
         Navigator.pushReplacementNamed(context, '/login');
@@ -73,7 +77,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Lỗi đăng ký: ${e.toString()}")),
+          SnackBar(content: Text("${tr.translate('register_error')}: $e")),
         );
       }
     } finally {
@@ -84,12 +88,41 @@ class _RegisterScreenState extends State<RegisterScreen> {
   @override
   Widget build(BuildContext context) {
     final theme = Theme.of(context);
+    final tr = AppLocalizations.of(context);
+
+    if (tr == null) {
+      return const Scaffold(
+        body: Center(child: CircularProgressIndicator()),
+      );
+    }
 
     return Scaffold(
       appBar: AppBar(
-        title: const Text("Đăng ký tài khoản"),
+        title: Text(tr.translate('register_title')),
         backgroundColor: theme.colorScheme.primary,
         foregroundColor: Colors.white,
+        actions: [
+          PopupMenuButton<Locale>(
+            onSelected: (locale) {
+              InOldDaysApp.setLocale(context, locale);
+            },
+            itemBuilder: (context) => const [
+              PopupMenuItem(
+                value: Locale('vi'),
+                child: Text('🇻🇳 Tiếng Việt'),
+              ),
+              PopupMenuItem(
+                value: Locale('en'),
+                child: Text('🇺🇸 English'),
+              ),
+              PopupMenuItem(
+                value: Locale('zh'),
+                child: Text('🇨🇳 中文'),
+              ),
+            ],
+            icon: const Icon(Icons.language, color: Colors.white),
+          ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.all(20),
@@ -105,60 +138,64 @@ class _RegisterScreenState extends State<RegisterScreen> {
               child: Column(
                 children: [
                   const SizedBox(height: 10),
-                  // Tên đăng nhập (không lưu trong DB)
                   TextFormField(
                     controller: _usernameController,
-                    decoration: _buildInputDecoration(Icons.person, "Tên đăng nhập (Tùy chọn)"),
+                    decoration: _buildInputDecoration(
+                        Icons.person, tr.translate('username_optional')),
                   ),
                   const SizedBox(height: 16),
 
-                  // Mật khẩu
                   TextFormField(
                     controller: _passwordController,
                     obscureText: _obscurePwd,
                     validator: (value) {
                       if (value == null || value.isEmpty || value.length < 6) {
-                        return 'Mật khẩu phải có ít nhất 6 ký tự.';
+                        return tr.translate('password_min_length');
                       }
                       return null;
                     },
-                    decoration: _buildInputDecoration(Icons.lock, "Mật khẩu").copyWith(
+                    decoration: _buildInputDecoration(
+                      Icons.lock,
+                      tr.translate('password'),
+                    ).copyWith(
                       suffixIcon: IconButton(
                         icon: Icon(
-                          _obscurePwd ? Icons.visibility_off : Icons.visibility,
+                          _obscurePwd
+                              ? Icons.visibility_off
+                              : Icons.visibility,
                           color: Colors.grey,
                         ),
-                        onPressed: () => setState(() => _obscurePwd = !_obscurePwd),
+                        onPressed: () =>
+                            setState(() => _obscurePwd = !_obscurePwd),
                       ),
                     ),
                   ),
                   const SizedBox(height: 16),
 
-                  // Họ và tên
                   TextFormField(
                     controller: _fullnameController,
-                    decoration: _buildInputDecoration(Icons.badge, "Họ và tên (Tùy chọn)"),
+                    decoration: _buildInputDecoration(
+                        Icons.badge, tr.translate('fullname_optional')),
                   ),
                   const SizedBox(height: 16),
 
-                  // Email
                   TextFormField(
                     controller: _emailController,
                     keyboardType: TextInputType.emailAddress,
                     validator: (value) {
                       if (value == null || value.isEmpty) {
-                        return 'Vui lòng nhập Email.';
+                        return tr.translate('email_required');
                       }
                       if (!RegExp(r'^[^@]+@[^@]+\.[^@]+').hasMatch(value)) {
-                        return 'Email không hợp lệ.';
+                        return tr.translate('email_invalid');
                       }
                       return null;
                     },
-                    decoration: _buildInputDecoration(Icons.email, "Email"),
+                    decoration:
+                    _buildInputDecoration(Icons.email, tr.translate('email')),
                   ),
                   const SizedBox(height: 30),
 
-                  // Nút Đăng ký
                   SizedBox(
                     width: double.infinity,
                     child: ElevatedButton.icon(
@@ -179,10 +216,11 @@ class _RegisterScreenState extends State<RegisterScreen> {
                           strokeWidth: 2,
                         ),
                       )
-                          : const Icon(Icons.app_registration, color: Colors.white),
-                      label: const Text(
-                        "Đăng ký",
-                        style: TextStyle(fontSize: 16, color: Colors.white),
+                          : const Icon(Icons.app_registration,
+                          color: Colors.white),
+                      label: Text(
+                        tr.translate('register_button'),
+                        style: const TextStyle(fontSize: 16, color: Colors.white),
                       ),
                     ),
                   ),
@@ -191,7 +229,7 @@ class _RegisterScreenState extends State<RegisterScreen> {
                   TextButton(
                     onPressed: () => Navigator.pop(context),
                     child: Text(
-                      "Đã có tài khoản? Đăng nhập ngay!",
+                      tr.translate('have_account'),
                       style: TextStyle(color: theme.colorScheme.secondary),
                     ),
                   ),

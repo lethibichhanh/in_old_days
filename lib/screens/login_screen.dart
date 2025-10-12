@@ -106,7 +106,7 @@ class _LoginScreenState extends State<LoginScreen> {
 
     return Scaffold(
       appBar: AppBar(
-        title: Text(tr.translate('language')),
+
         backgroundColor: Colors.transparent,
         elevation: 0,
         actions: [

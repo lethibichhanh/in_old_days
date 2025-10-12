@@ -2,14 +2,11 @@ import 'package:sqflite/sqflite.dart'; // Chỉ cần nếu dùng cho type check
 
 class UserModel {
   final int? id;
-  // Giả định username là trường cần thiết cho Flutter, mặc dù thiếu trong schema SQL mới nhất.
-  // Tôi thêm nó vào để code Flutter không bị lỗi.
   final String username;
   final String email;
   final String passwordHash;
   final String? fullname;
   final String? avatar;
-  // 💡 CẬP NHẬT: Thay đổi từ INTEGER sang String để khớp với schema SQLite mới nhất
   final String role;
   final String? createdAt;
   final String? updatedAt;
@@ -26,57 +23,63 @@ class UserModel {
     this.updatedAt,
   });
 
-  // 1. Chuyển đổi từ Map (Database Column Names)
+  // ✅ 1. Chuyển đổi từ Map (Database Column Names)
   factory UserModel.fromMap(Map<String, dynamic> map) {
-    // Phương thức này dùng khi đọc từ DB (DBHelper)
+    final emailValue = map['email']?.toString() ?? '';
+    final usernameValue = map['username']?.toString() ??
+        (emailValue.isNotEmpty ? emailValue.split('@').first : 'unknown');
+
     return UserModel(
-      id: map['user_id'] as int?,
-      // Giả định username được tính toán nếu không có cột DB tương ứng
-      username: map['username'] ?? map['email'].split('@').first,
-      fullname: map['full_name'], // Tên cột DB
-      email: map['email'] as String,
-      avatar: map['avatar_url'], // Tên cột DB
-      passwordHash: map['password_hash'] as String,
+      id: map['user_id'] is int ? map['user_id'] as int : int.tryParse('${map['user_id']}'),
+      username: usernameValue,
+      fullname: map['full_name']?.toString(),
+      email: emailValue,
+      avatar: map['avatar_url']?.toString(),
+      passwordHash: map['password_hash']?.toString() ?? '',
       role: map['role']?.toString() ?? 'user',
-      createdAt: map['created_at'],
-      updatedAt: map['updated_at'],
+      createdAt: map['created_at']?.toString(),
+      updatedAt: map['updated_at']?.toString(),
     );
   }
 
-  // 2. Chuyển đổi từ Map (Flutter Arguments/Legacy)
+  // ✅ 2. Chuyển đổi từ Map (Flutter Arguments)
   factory UserModel.fromMapArguments(Map<String, dynamic> map) {
-    // Phương thức này dùng khi đọc từ arguments (nếu arguments vẫn là Map)
-    // Cần ánh xạ từ tên trường Dart sang tên trường truyền vào (có thể là tên cột DB)
+    final emailValue = map['email']?.toString() ?? '';
+    final usernameValue = map['username']?.toString() ??
+        (emailValue.isNotEmpty ? emailValue.split('@').first : 'unknown');
+
     return UserModel(
-      id: map['id'] ?? map['user_id'] as int?,
-      username: map['username'] ?? map['email']?.split('@').first,
-      fullname: map['fullname'] ?? map['full_name'],
-      email: map['email'] as String,
-      avatar: map['avatar'] ?? map['avatar_url'],
-      passwordHash: map['password_hash'] ?? map['passwordHash'] ?? '',
+      id: (map['id'] ?? map['user_id']) is int
+          ? (map['id'] ?? map['user_id'])
+          : int.tryParse('${map['id'] ?? map['user_id']}'),
+      username: usernameValue,
+      fullname: map['fullname']?.toString() ?? map['full_name']?.toString(),
+      email: emailValue,
+      avatar: map['avatar']?.toString() ?? map['avatar_url']?.toString(),
+      passwordHash: map['password_hash']?.toString() ??
+          map['passwordHash']?.toString() ??
+          '',
       role: map['role']?.toString() ?? 'user',
-      createdAt: map['created_at'],
-      updatedAt: map['updated_at'],
+      createdAt: map['created_at']?.toString(),
+      updatedAt: map['updated_at']?.toString(),
     );
   }
 
-  // 3. Chuyển sang Map (để insert/update DB)
+  // ✅ 3. Map để ghi vào DB
   Map<String, dynamic> toDbMap() {
-    // Phương thức này dùng khi ghi vào DB (DBHelper)
     return {
       'user_id': id,
-      // 'username' không đưa vào nếu không phải cột DB và DB không tự tính toán
       'full_name': fullname,
       'email': email,
       'avatar_url': avatar,
       'password_hash': passwordHash,
       'role': role,
-      'created_at': createdAt,
-      'updated_at': DateTime.now().toIso8601String(), // Cập nhật updated_at
+      'created_at': createdAt ?? DateTime.now().toIso8601String(),
+      'updated_at': DateTime.now().toIso8601String(),
     };
   }
 
-  // 4. Copy (cho state management)
+  // ✅ 4. Copy
   UserModel copyWith({
     int? id,
     String? username,

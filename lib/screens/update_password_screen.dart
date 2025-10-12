@@ -1,7 +1,8 @@
+// Trong lib/screens/update_password_screen.dart (code mới)
+import 'dart:math';
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/user_model.dart';
-// import 'password_strength_generator.dart'; // (Nếu bạn có thêm tính năng này)
 
 class UpdatePasswordScreen extends StatefulWidget {
   const UpdatePasswordScreen({super.key});
@@ -12,28 +13,90 @@ class UpdatePasswordScreen extends StatefulWidget {
 
 class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   UserModel? _user;
+  int? _userIdFromArgs; // Biến để lưu ID được truyền vào
+
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _isLoading = false;
+  bool _isLoading = true; // Bắt đầu loading
   bool _isCurrentPasswordVisible = false;
   bool _isNewPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
+
+  String _passwordStrength = "Rất yếu (0/100)";
+  Color _strengthColor = Colors.red;
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // LƯU Ý: Argument được truyền vào là Map<String, dynamic>
-    // và chứa 'user' là một UserModel object (từ UpdateProfileScreen).
-    final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
+    if (_user == null && _userIdFromArgs == null) {
+      final args = ModalRoute.of(context)?.settings.arguments;
+      debugPrint("📦 Arguments nhận được: $args");
 
-    // Kiểm tra và gán UserModel object
-    if (args != null && args['user'] is UserModel) {
-      _user = args['user'] as UserModel;
+      // 1. Lấy ID từ Arguments (Dù là int trực tiếp hay Map)
+      if (args is int) {
+        _userIdFromArgs = args;
+      } else if (args is UserModel) {
+        _userIdFromArgs = args.id;
+      } else if (args is Map<String, dynamic>) {
+        // Nếu ProfileScreen truyền {'userId': id} như code cũ
+        _userIdFromArgs = args['userId'] is int ? args['userId'] : int.tryParse(args['userId']?.toString() ?? '');
+      }
+
+      // 2. Nếu có ID, tiến hành tải user từ DB
+      if (_userIdFromArgs != null) {
+        _loadUserById(_userIdFromArgs!);
+      } else {
+        // 3. Fallback: Nếu không có ID, tải user đầu tiên (Ít tin cậy hơn)
+        debugPrint("❌ Không tìm thấy ID từ arguments, đang thử lấy từ DB...");
+        _loadUserFromDatabase();
+      }
     }
-    // KHÔNG cần dùng UserModel.fromMapArguments vì bạn đã truyền object UserModel.
+  }
+
+  Future<void> _loadUserById(int id) async {
+    try {
+      final user = await DBHelper.getUserById(id);
+      if (mounted) {
+        setState(() {
+          _user = user;
+          _isLoading = false;
+        });
+        if (user != null) {
+          debugPrint("✅ Đã nạp user theo ID: ${user.email}");
+        } else {
+          debugPrint("⚠️ Không tìm thấy user với ID: $id");
+          _showSnackBar("⚠️ Không tìm thấy tài khoản để đổi mật khẩu.");
+        }
+      }
+    } catch (e) {
+      debugPrint("❌ Lỗi tải user theo ID: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
+  }
+
+  // Hàm Fallback (chỉ dùng khi không có ID)
+  Future<void> _loadUserFromDatabase() async {
+    try {
+      final users = await DBHelper.getAllUsers();
+      if (mounted) {
+        setState(() {
+          _user = users.isNotEmpty ? users.first : null;
+          _isLoading = false;
+        });
+        if (users.isNotEmpty) {
+          debugPrint("✅ Đã nạp user từ DB (Fallback): ${_user!.email}");
+        } else {
+          debugPrint("⚠️ Không có người dùng nào trong DB!");
+          _showSnackBar("⚠️ Không có tài khoản nào được đăng nhập.");
+        }
+      }
+    } catch (e) {
+      debugPrint("❌ Lỗi tải user từ DB: $e");
+      if (mounted) setState(() => _isLoading = false);
+    }
   }
 
   @override
@@ -44,72 +107,93 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     super.dispose();
   }
 
-  /// 🔹 Hàm cập nhật mật khẩu
+  // ================== 🔐 TẠO MẬT KHẨU NGẪU NHIÊN ==================
+  void _generateRandomPassword() {
+    const String chars =
+        'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%^&*()_-+=<>?';
+    final rand = Random.secure();
+    final password =
+    List.generate(12, (index) => chars[rand.nextInt(chars.length)]).join();
+    _newPasswordController.text = password;
+    _confirmPasswordController.text = password;
+    _checkPasswordStrength(password);
+    _showSnackBar("🔑 Đã tạo mật khẩu ngẫu nhiên!");
+  }
+
+  // ================== 📊 KIỂM TRA ĐỘ MẠNH MẬT KHẨU ==================
+  void _checkPasswordStrength(String password) {
+    // ... (Giữ nguyên logic kiểm tra độ mạnh)
+    int score = 0;
+
+    if (password.length >= 6) score += 25;
+    if (password.length >= 10) score += 25;
+    if (RegExp(r'[A-Z]').hasMatch(password)) score += 15;
+    if (RegExp(r'[0-9]').hasMatch(password)) score += 15;
+    if (RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(password)) score += 20;
+
+    if (score <= 30) {
+      _passwordStrength = "Rất yếu ($score/100)";
+      _strengthColor = Colors.red;
+    } else if (score <= 60) {
+      _passwordStrength = "Trung bình ($score/100)";
+      _strengthColor = Colors.orange;
+    } else {
+      _passwordStrength = "Mạnh ($score/100)";
+      _strengthColor = Colors.green;
+    }
+
+    setState(() {});
+  }
+
+  // ================== 🧭 XỬ LÝ CẬP NHẬT MẬT KHẨU ==================
   Future<void> _updatePassword() async {
-    // Đảm bảo user và id tồn tại
+    // Logic này được giữ nguyên, nó sẽ kiểm tra _user sau khi đã được tải
     if (_user == null || _user!.id == null) {
       _showSnackBar("❌ Thông tin người dùng không hợp lệ.");
       return;
     }
 
-    final currentPassword = _currentPasswordController.text;
-    final newPassword = _newPasswordController.text;
-    final confirmPassword = _confirmPasswordController.text;
+    final currentPassword = _currentPasswordController.text.trim();
+    final newPassword = _newPasswordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
 
-    // 1. Kiểm tra rỗng và độ dài
-    if (currentPassword.isEmpty || newPassword.isEmpty || confirmPassword.isEmpty) {
-      _showSnackBar("⚠️ Vui lòng nhập đầy đủ 3 trường mật khẩu.");
+    if (currentPassword.isEmpty ||
+        newPassword.isEmpty ||
+        confirmPassword.isEmpty) {
+      _showSnackBar("⚠️ Vui lòng nhập đầy đủ thông tin.");
       return;
     }
+
     if (newPassword.length < 6) {
       _showSnackBar("❌ Mật khẩu mới phải có ít nhất 6 ký tự.");
       return;
     }
+
     if (newPassword != confirmPassword) {
-      _showSnackBar("❌ Mật khẩu mới và Xác nhận mật khẩu không khớp.");
+      _showSnackBar("❌ Mật khẩu mới và xác nhận không khớp.");
       return;
     }
 
-    // 2. Kiểm tra mật khẩu hiện tại có đúng không
-    // 💡 KHẮC PHỤC LỖI: Sử dụng trường passwordHash.
-    // LƯU Ý QUAN TRỌNG: Đây là so sánh **PlainText** với **Hash**.
-    // Trong ứng dụng thực tế, bạn PHẢI HASH 'currentPassword'
-    // và so sánh chuỗi hash đó với '_user!.passwordHash'.
-    if (currentPassword != _user!.passwordHash) {
-      // Giả định đơn giản: nếu _user!.passwordHash là chuỗi đã được hash,
-      // thì so sánh này sẽ LUÔN SAI trừ khi bạn hash 'currentPassword' trước.
-      // Dùng logic sau để so sánh hash bảo mật:
-      // if (!await Hasher.verify(currentPassword, _user!.passwordHash))
-
-      // Tạm thời, tôi giữ logic đơn giản để tránh lỗi biên dịch:
-      if (currentPassword != _user!.passwordHash) {
-        _showSnackBar("❌ Mật khẩu hiện tại không đúng.");
-        return;
-      }
+    // ⚠️ So sánh password hiện tại với hash trong DB
+    final currentHash = _user!.passwordHash;
+    if (currentHash.isEmpty || currentPassword != currentHash) {
+      _showSnackBar("❌ Mật khẩu hiện tại không đúng hoặc chưa được đặt.");
+      return;
     }
-
 
     setState(() => _isLoading = true);
 
     try {
-      // ✅ Hash mật khẩu mới trước khi lưu vào DB!
-      // Giả định bạn có một hàm hash. Ví dụ: String hashedNewPassword = await Hasher.hash(newPassword);
-      String hashedNewPassword = newPassword; // ⚠️ Thay bằng Hashing thực tế!
-
-      // ✅ Tạo đối tượng mới với HASH mật khẩu đã cập nhật
       final updatedUser = _user!.copyWith(
-        passwordHash: hashedNewPassword, // ✅ Dùng đúng tên trường 'passwordHash'
+        passwordHash: newPassword,
+        updatedAt: DateTime.now().toIso8601String(),
       );
 
-      // ✅ Cập nhật DB
-      final rows = await DBHelper.updateUser(updatedUser);
+      final result = await DBHelper.updateUser(updatedUser);
 
-      if (rows > 0) {
-        if (mounted) {
-          _showSnackBar("✅ Đổi mật khẩu thành công!");
-          // 👉 Trả UserModel mới về ProfileScreen
-          Navigator.pop(context, updatedUser);
-        }
+      if (result > 0) {
+        _showSnackBar("✅ Đổi mật khẩu thành công!");
+        Navigator.pop(context, updatedUser);
       } else {
         _showSnackBar("⚠️ Không có thay đổi nào được lưu.");
       }
@@ -124,27 +208,27 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   void _showSnackBar(String message) {
     if (mounted) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text(message)),
+        SnackBar(content: Text(message), behavior: SnackBarBehavior.floating),
       );
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    if (_user == null) {
-      return const Scaffold(
-        body: Center(child: Text("❌ Không tìm thấy thông tin người dùng.")),
-      );
-    }
-
     return Scaffold(
       appBar: AppBar(
         title: const Text("Đổi mật khẩu"),
         backgroundColor: Colors.indigo,
         foregroundColor: Colors.white,
       ),
-      body: Stack(
+      // Thay đổi logic kiểm tra _user thành _isLoading
+      body: _isLoading
+          ? const Center(child: CircularProgressIndicator())
+          : _user == null
+          ? const Center(child: Text("Không thể tải thông tin người dùng."))
+          : Stack(
         children: [
+          // ... (Phần UI Stack được giữ nguyên)
           Container(
             decoration: const BoxDecoration(
               gradient: LinearGradient(
@@ -165,66 +249,89 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
                 padding: const EdgeInsets.all(24),
                 child: Column(
                   children: [
-                    const Icon(Icons.lock_reset, size: 80, color: Colors.indigo),
+                    const Icon(Icons.lock_reset,
+                        size: 80, color: Colors.indigo),
                     const SizedBox(height: 24),
-
-                    // Mật khẩu hiện tại
                     _buildPasswordField(
                       controller: _currentPasswordController,
                       label: "Mật khẩu hiện tại",
                       icon: Icons.lock_outline,
                       isVisible: _isCurrentPasswordVisible,
                       onToggleVisibility: () {
-                        setState(() => _isCurrentPasswordVisible = !_isCurrentPasswordVisible);
+                        setState(() => _isCurrentPasswordVisible =
+                        !_isCurrentPasswordVisible);
                       },
                     ),
                     const SizedBox(height: 16),
-
-                    // Mật khẩu mới
                     _buildPasswordField(
                       controller: _newPasswordController,
                       label: "Mật khẩu mới",
                       icon: Icons.lock,
                       isVisible: _isNewPasswordVisible,
                       onToggleVisibility: () {
-                        setState(() => _isNewPasswordVisible = !_isNewPasswordVisible);
+                        setState(() => _isNewPasswordVisible =
+                        !_isNewPasswordVisible);
                       },
+                      onChanged: _checkPasswordStrength,
                     ),
-                    // TODO: Thêm Password Strength Bar ở đây theo hình mẫu
+                    const SizedBox(height: 8),
+                    Row(
+                      children: [
+                        Text("Độ mạnh:",
+                            style: TextStyle(color: Colors.grey[700])),
+                        const SizedBox(width: 8),
+                        Text(
+                          _passwordStrength,
+                          style: TextStyle(
+                              fontWeight: FontWeight.bold,
+                              color: _strengthColor),
+                        ),
+                        const Spacer(),
+                        TextButton.icon(
+                          onPressed: _generateRandomPassword,
+                          icon: const Icon(Icons.refresh),
+                          label: const Text("Tạo mật khẩu"),
+                        ),
+                      ],
+                    ),
                     const SizedBox(height: 16),
-
-                    // Xác nhận mật khẩu mới
                     _buildPasswordField(
                       controller: _confirmPasswordController,
                       label: "Xác nhận mật khẩu mới",
                       icon: Icons.check_circle_outline,
                       isVisible: _isConfirmPasswordVisible,
                       onToggleVisibility: () {
-                        setState(() => _isConfirmPasswordVisible = !_isConfirmPasswordVisible);
+                        setState(() => _isConfirmPasswordVisible =
+                        !_isConfirmPasswordVisible);
                       },
                     ),
-
                     const SizedBox(height: 30),
-
-                    // Nút Đổi Mật Khẩu
                     SizedBox(
                       width: double.infinity,
                       child: ElevatedButton.icon(
-                        onPressed: _isLoading ? null : _updatePassword,
+                        onPressed:
+                        _isLoading ? null : _updatePassword,
                         icon: _isLoading
                             ? const SizedBox(
-                          width: 22, height: 22,
-                          child: CircularProgressIndicator(color: Colors.white, strokeWidth: 2),
+                          width: 22,
+                          height: 22,
+                          child: CircularProgressIndicator(
+                            color: Colors.white,
+                            strokeWidth: 2,
+                          ),
                         )
                             : const Icon(Icons.security_update),
                         label: const Text(
                           "Đổi Mật Khẩu",
-                          style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                          style: TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold),
                         ),
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.indigo,
                           foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
+                          padding: const EdgeInsets.symmetric(
+                              vertical: 14),
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(16),
                           ),
@@ -239,25 +346,27 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
           if (_isLoading)
             Container(
               color: Colors.black.withOpacity(0.3),
-              child: const Center(child: CircularProgressIndicator(color: Colors.white)),
+              child: const Center(
+                  child: CircularProgressIndicator(color: Colors.white)),
             ),
         ],
       ),
     );
   }
 
-  // Widget riêng để xây dựng trường nhập mật khẩu (có thể ẩn/hiện)
   Widget _buildPasswordField({
     required TextEditingController controller,
     required String label,
     required IconData icon,
     required bool isVisible,
     required VoidCallback onToggleVisibility,
+    void Function(String)? onChanged,
   }) {
     return TextField(
       controller: controller,
       obscureText: !isVisible,
       keyboardType: TextInputType.visiblePassword,
+      onChanged: onChanged,
       decoration: InputDecoration(
         labelText: label,
         prefixIcon: Icon(icon, color: Colors.indigo),

@@ -14,7 +14,7 @@ class DBHelper {
   static Database? _db;
   static const _dbName = "in_old_days.db";
   // ✅ Tăng version lên 16 để đảm bảo các thay đổi schema (thêm role/avatar_url) được áp dụng
-  static const _dbVersion = 21;
+  static const _dbVersion = 23;
 
   // ================== INITIALIZATION ==================
   static Future<void> prepareDatabaseFromAssets() async {
@@ -282,15 +282,26 @@ class DBHelper {
     return null;
   }
 
+  /// Cập nhật thông tin người dùng trong bảng `users`
   static Future<int> updateUser(UserModel user) async {
     final db = await database;
+
+    // ✅ Dùng toDbMap() để chuyển đúng định dạng cột DB
+    final data = user.toDbMap();
+
+    // ⚙️ Loại bỏ các giá trị null (tránh override cột bằng null)
+    data.removeWhere((key, value) => value == null);
+
+    // ✅ Thực hiện update theo user_id
     return await db.update(
       'users',
-      user.toDbMap(),
+      data,
       where: 'user_id = ?',
       whereArgs: [user.id],
+      conflictAlgorithm: ConflictAlgorithm.replace, // đảm bảo không lỗi ghi đè
     );
   }
+
   // ... (Giữ nguyên các hàm khác)
   // ================== EVENTS ==================
   static Future<List<Map<String, dynamic>>> getAllEvents() async {
@@ -413,7 +424,7 @@ class DBHelper {
 
   static Future<void> debugPrintAllImages() async {
     final db = await database;
-    final res = await db.rawQuery("SELECT event_id, image_url FROM events LIMIT 50");
+    final res = await db.rawQuery("SELECT event_id, image_url FROM events LIMIT 378");
     for (var row in res) {
       debugPrint("📷 Event ${row['event_id']}: ${row['image_url']}");
     }
@@ -465,6 +476,13 @@ class DBHelper {
     } catch (e) {
       debugPrint("⚠️ Lỗi sync events & locations: $e");
     }
+  }
+
+  // ================== USERS (EXTENSIONS) ==================
+  static Future<List<UserModel>> getAllUsers() async {
+    final db = await database;
+    final res = await db.query('users');
+    return res.map((row) => UserModel.fromMap(row)).toList();
   }
 
   // ================== ALIASES ==================

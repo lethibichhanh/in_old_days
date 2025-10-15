@@ -4,19 +4,36 @@ import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../models/event.dart';
 import 'event_detail_screen.dart';
-import 'home_screen.dart'; // Màn hình chính
-import 'package:flutter/foundation.dart'; // Thêm để dùng debugPrint
+import 'home_screen.dart';
+import 'package:flutter/foundation.dart';
+import '../l10n/app_localizations.dart'; // ✅ THÊM IMPORT NGÔN NGỮ
+
+// --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ) ---
+const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
+const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
+const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà
+const Color kCardColor = Colors.white;
+const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
+const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
+
 
 class EventListScreen extends StatelessWidget {
   final List<EventModel> events;
+  // ✅ THÊM userId VÀO CONSTRUCTOR (để truyền vào EventDetailScreen)
+  final int? userId;
 
-  const EventListScreen({super.key, required this.events});
+  const EventListScreen({
+    super.key,
+    required this.events,
+    this.userId, // Nhận userId
+  });
 
-  /// ✅ Hàm load hình ảnh Asset hoặc Network
+  /// ✅ Hàm load hình ảnh Asset hoặc Network (Giữ nguyên)
   Widget _buildImageWidget(EventModel e, Color secondaryTextColor) {
     if (e.imageUrl == null || e.imageUrl!.trim().isEmpty) {
       return Icon(Icons.history_toggle_off,
-          size: 40, color: secondaryTextColor);
+          size: 40, color: kPrimaryColor);
     }
 
     String imageUrl = e.imageUrl!.replaceAll('\\', '/').trim();
@@ -24,7 +41,6 @@ class EventListScreen extends StatelessWidget {
         imageUrl.startsWith('http://') || imageUrl.startsWith('https://');
 
     if (isNetwork) {
-      // Ảnh từ URL
       if (kDebugMode) debugPrint("🌐 Load ảnh từ mạng: $imageUrl");
       return Image.network(
         imageUrl,
@@ -33,22 +49,17 @@ class EventListScreen extends StatelessWidget {
         fit: BoxFit.cover,
         errorBuilder: (_, __, ___) {
           if (kDebugMode) debugPrint("❌ Lỗi tải ảnh mạng: $imageUrl");
-          return Icon(Icons.broken_image, size: 40, color: secondaryTextColor);
+          return Icon(Icons.broken_image, size: 40, color: kPrimaryColor);
         },
       );
     } else {
-      // ✅ Ảnh asset cục bộ
       String assetPath = imageUrl;
-
-      // 🌟 FIX: thay dấu "-" bằng "_"
       assetPath = assetPath.replaceAll('-', '_');
 
-      // 1. Nếu DB chỉ lưu tên file → thêm prefix
       if (!assetPath.startsWith('assets/')) {
         assetPath = 'assets/Image/$assetPath';
       }
 
-      // 2. Danh sách các đường dẫn tiềm năng
       List<String> candidates = [];
       if (assetPath.endsWith(".png") || assetPath.endsWith(".jpg")) {
         candidates.add(assetPath);
@@ -57,15 +68,14 @@ class EventListScreen extends StatelessWidget {
         candidates.add("$assetPath.jpg");
       }
 
-      // 3. Load asset với fallback
       return _loadAssetWithFallback(candidates, secondaryTextColor);
     }
   }
 
-  /// 🖼️ Hàm hỗ trợ load Asset với cơ chế Fallback
+  /// 🖼️ Hàm hỗ trợ load Asset với cơ chế Fallback (Giữ nguyên)
   Widget _loadAssetWithFallback(List<String> paths, Color secondaryTextColor) {
     if (paths.isEmpty) {
-      return Icon(Icons.broken_image, size: 40, color: secondaryTextColor);
+      return Icon(Icons.broken_image, size: 40, color: kPrimaryColor);
     }
 
     final String primaryPath = paths.first;
@@ -81,32 +91,39 @@ class EventListScreen extends StatelessWidget {
         if (fallbackPaths.isNotEmpty) {
           return _loadAssetWithFallback(fallbackPaths, secondaryTextColor);
         }
-        return Icon(Icons.broken_image, size: 40, color: secondaryTextColor);
+        return Icon(Icons.broken_image, size: 40, color: kPrimaryColor);
       },
     );
   }
 
   @override
   Widget build(BuildContext context) {
-    final Color primaryColor = Theme.of(context).primaryColor;
-    final Color cardColor = Colors.white;
-    final Color textColor = Colors.black87;
-    final Color secondaryTextColor = Colors.grey.shade600;
+    // ✅ GỌI APP LOCALIZATIONS
+    final tr = AppLocalizations.of(context)!;
+
+    // ✅ KHAI BÁO CÁC CHUỖI DỊCH
+    final appBarTitle = tr.translate('timeline_title');
+    final noEventFound = tr.translate('list_no_event_found');
+    final yearPrefix = tr.translate('year_prefix_long_no_icon');
+    final datePrefix = tr.translate('date_prefix_long_no_icon');
+    final dateUnknown = tr.translate('date_unknown');
+    final homeTooltip = tr.translate('home_tooltip');
+
 
     return Scaffold(
-      backgroundColor: Colors.grey.shade100,
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: const Text(
-          'DÒNG THỜI GIAN LỊCH SỬ',
-          style: TextStyle(
-            color: Colors.black,
+        title: Text(
+          appBarTitle, // ✅ Dịch: 'DÒNG THỜI GIAN LỊCH SỬ'
+          style: const TextStyle(
+            color: Colors.white,
             fontWeight: FontWeight.bold,
             letterSpacing: 1.2,
           ),
         ),
         centerTitle: true,
-        backgroundColor: cardColor,
-        elevation: 1,
+        backgroundColor: kAppBarColor,
+        elevation: 0,
       ),
 
       // 🏠 Nút về Trang Chủ
@@ -116,27 +133,28 @@ class EventListScreen extends StatelessWidget {
             MaterialPageRoute(builder: (_) => const HomeScreen()),
           );
         },
-        backgroundColor: Colors.black,
+        backgroundColor: kAccentColor,
         foregroundColor: Colors.white,
         child: const Icon(Icons.home_outlined),
-        tooltip: 'Về màn hình chính',
+        tooltip: homeTooltip, // ✅ Dịch: 'Về màn hình chính'
       ),
 
       // 📜 Danh sách sự kiện
       body: events.isEmpty
           ? Center(
         child: Text(
-          '📭 Không có sự kiện nào trong danh sách.',
+          noEventFound, // ✅ Dịch: '📭 Không có sự kiện nào trong danh sách.'
+          textAlign: TextAlign.center,
           style: TextStyle(
             fontSize: 16,
             fontWeight: FontWeight.w500,
-            color: secondaryTextColor,
+            color: kSubtextColor,
           ),
         ),
       )
           : ListView.builder(
         padding:
-        const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
         itemCount: events.length,
         itemBuilder: (context, index) {
           final e = events[index];
@@ -145,8 +163,8 @@ class EventListScreen extends StatelessWidget {
           final String dateStr = e.date != null
               ? DateFormat('dd/MM/yyyy').format(e.date!)
               : (e.year != null
-              ? 'Năm: ${e.year}'
-              : 'Ngày: Không rõ');
+              ? '$yearPrefix: ${e.year}' // ✅ Dịch tiền tố Năm
+              : '$datePrefix: $dateUnknown'); // ✅ Dịch tiền tố Ngày + Không rõ
 
           // 📍 Vị trí hiển thị
           String locationInfo = '';
@@ -161,44 +179,46 @@ class EventListScreen extends StatelessWidget {
 
           // 📦 Card sự kiện
           return Card(
-            color: cardColor,
-            elevation: 2,
+            color: kCardColor,
+            elevation: 4,
+            shadowColor: kPrimaryColor.withOpacity(0.3),
             shape: RoundedRectangleBorder(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               side: BorderSide(
-                  color: Colors.grey.shade300, width: 0.5),
+                  color: kPrimaryColor.withOpacity(0.2), width: 1),
             ),
-            margin: const EdgeInsets.only(bottom: 12),
+            margin: const EdgeInsets.only(bottom: 15),
             child: InkWell(
-              borderRadius: BorderRadius.circular(8),
+              borderRadius: BorderRadius.circular(12),
               onTap: () {
                 if (e.eventId != null) {
                   Navigator.of(context).push(
                     MaterialPageRoute(
                       builder: (_) => EventDetailScreen(
                         eventId: e.eventId!,
+                        userId: userId, // ✅ TRUYỀN userId
                       ),
                     ),
                   );
                 }
               },
               child: Padding(
-                padding: const EdgeInsets.all(12.0),
+                padding: const EdgeInsets.all(14.0),
                 child: Row(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     // 🖼️ Ảnh sự kiện
                     ClipRRect(
-                      borderRadius: BorderRadius.circular(4),
+                      borderRadius: BorderRadius.circular(8),
                       child: Container(
                         width: 60,
                         height: 60,
-                        color: Colors.grey.shade200,
+                        color: kPrimaryColor.withOpacity(0.1),
                         child: _buildImageWidget(
-                            e, secondaryTextColor),
+                            e, kPrimaryColor),
                       ),
                     ),
-                    const SizedBox(width: 12),
+                    const SizedBox(width: 15),
 
                     // 📝 Chi tiết sự kiện
                     Expanded(
@@ -211,31 +231,31 @@ class EventListScreen extends StatelessWidget {
                             e.title,
                             maxLines: 2,
                             overflow: TextOverflow.ellipsis,
-                            style: TextStyle(
+                            style: const TextStyle(
                               fontSize: 16,
                               fontWeight: FontWeight.bold,
-                              color: textColor,
+                              color: kTitleTextColor,
                             ),
                           ),
-                          const SizedBox(height: 4),
+                          const SizedBox(height: 6),
 
                           // 📅 Ngày tháng
                           Text.rich(
                             TextSpan(
                               children: [
-                                WidgetSpan(
+                                const WidgetSpan(
                                   child: Icon(
                                     Icons.access_time,
                                     size: 14,
-                                    color: primaryColor,
+                                    color: kPrimaryColor, // Icon Mint
                                   ),
                                 ),
                                 const TextSpan(text: ' '),
                                 TextSpan(
                                   text: dateStr,
-                                  style: TextStyle(
+                                  style: const TextStyle(
                                     fontSize: 14,
-                                    color: secondaryTextColor,
+                                    color: kSubtextColor,
                                   ),
                                 ),
                               ],
@@ -246,24 +266,23 @@ class EventListScreen extends StatelessWidget {
                           if (locationInfo.isNotEmpty)
                             Padding(
                               padding:
-                              const EdgeInsets.only(top: 2),
+                              const EdgeInsets.only(top: 4),
                               child: Text.rich(
                                 TextSpan(
                                   children: [
-                                    WidgetSpan(
+                                    const WidgetSpan(
                                       child: Icon(
                                         Icons.location_on,
                                         size: 14,
-                                        color: primaryColor,
+                                        color: kPrimaryColor, // Icon Mint
                                       ),
                                     ),
                                     const TextSpan(text: ' '),
                                     TextSpan(
                                       text: locationInfo,
-                                      style: TextStyle(
+                                      style: const TextStyle(
                                         fontSize: 13,
-                                        color:
-                                        secondaryTextColor,
+                                        color: kSubtextColor,
                                       ),
                                     ),
                                   ],
@@ -280,7 +299,7 @@ class EventListScreen extends StatelessWidget {
                         padding: const EdgeInsets.only(left: 8),
                         child: Icon(
                           Icons.map,
-                          color: primaryColor,
+                          color: kAccentColor, // Icon Coral
                           size: 20,
                         ),
                       ),

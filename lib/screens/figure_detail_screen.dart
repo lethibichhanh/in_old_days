@@ -5,74 +5,117 @@ import 'package:intl/intl.dart';
 import '../db/db_helper.dart';
 import '../models/historical_figure.dart';
 import 'event_detail_screen.dart';
+import '../l10n/app_localizations.dart'; // ✅ THÊM IMPORT NGÔN NGỮ
+
+// --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ) ---
+const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
+const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
+const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà
+const Color kCardColor = Colors.white;
+const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
+const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
+
 
 class FigureDetailScreen extends StatelessWidget {
   final HistoricalFigure figure;
+  // ✅ THÊM userId ĐỂ TRUYỀN XUỐNG EventDetailScreen (Nếu cần, đảm bảo tính nhất quán)
+  final int? userId;
 
-  const FigureDetailScreen({super.key, required this.figure});
+  const FigureDetailScreen({super.key, required this.figure, this.userId});
 
   @override
   Widget build(BuildContext context) {
-    // ⚠️ CHÚ Ý: Logic xử lý figure đã được chuyển sang router hoặc màn hình gọi.
-    // Nếu bạn đang dùng code này, bạn PHẢI đảm bảo HistoricalFigure đã được truyền vào
-    // constructor một cách hợp lệ, không thông qua ModalRoute như code cũ bị lỗi.
+    // ✅ TRUY CẬP LOCALIZATIONS
+    final tr = AppLocalizations.of(context)!;
+
+    // ✅ KHAI BÁO CÁC CHUỖI DỊCH
+    final noDescription = tr.translate('no_description');
+    final eventRelated = tr.translate('figure_event_related');
+    final errorLoadEvent = tr.translate('figure_error_load_event');
+    final noRelatedEvent = tr.translate('figure_no_related_event');
+    final noTitle = tr.translate('no_title');
+    final dateformat = tr.locale.languageCode == 'vi' ? 'dd/MM/yyyy' : 'MM/dd/yyyy';
 
     return Scaffold(
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: Text(figure.name),
-        backgroundColor: Colors.brown.shade300,
+        title: Text(
+          figure.name,
+          style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white),
+        ),
+        backgroundColor: kAppBarColor, // Màu Mint đậm
+        foregroundColor: Colors.white,
+        elevation: 0,
       ),
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Ảnh nhân vật
+            // 🖼️ Ảnh nhân vật (Giữ nguyên logic)
             if (figure.imageUrl != null && figure.imageUrl!.isNotEmpty)
               Center(
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(12),
-                  child: Image.network(
-                    figure.imageUrl!,
-                    height: 220,
-                    width: double.infinity,
-                    fit: BoxFit.cover,
-                    errorBuilder: (_, __, ___) => const SizedBox(
-                      height: 220,
-                      child: Icon(Icons.broken_image, size: 50),
+                child: Container(
+                  constraints: const BoxConstraints(maxHeight: 280), // Giới hạn chiều cao
+                  decoration: BoxDecoration(
+                    color: kCardColor, // Nền trắng cho ảnh contain
+                    borderRadius: BorderRadius.circular(20),
+                    boxShadow: [
+                      BoxShadow(
+                        color: kPrimaryColor.withOpacity(0.3),
+                        blurRadius: 10,
+                        offset: const Offset(0, 5),
+                      ),
+                    ],
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Image.network(
+                      figure.imageUrl!,
+                      // Chiều cao tự động điều chỉnh theo ảnh, tối đa 280
+                      height: 280,
+                      width: double.infinity,
+                      fit: BoxFit.contain, // ✅ KHÔNG CẮT ẢNH
+                      errorBuilder: (_, __, ___) => const SizedBox(
+                        height: 200,
+                        child: Center(
+                          child: Icon(Icons.broken_image, size: 50, color: kSubtextColor),
+                        ),
+                      ),
                     ),
                   ),
                 ),
               ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 24),
 
-            // Tên nhân vật
+            // Tên nhân vật (Giữ nguyên)
             Text(
               figure.name,
               style: Theme.of(context)
                   .textTheme
                   .headlineMedium
-                  ?.copyWith(fontWeight: FontWeight.bold),
+                  ?.copyWith(fontWeight: FontWeight.w900, color: kTitleTextColor),
             ),
             const SizedBox(height: 8),
 
-            // Ngày sinh – ngày mất
+            // Ngày sinh – ngày mất (Giữ nguyên)
             Text(
               figure.lifeSpan,
               style: Theme.of(context)
                   .textTheme
-                  .bodyMedium
-                  ?.copyWith(color: Colors.grey[700]),
+                  .titleSmall
+                  ?.copyWith(color: kAccentColor, fontWeight: FontWeight.bold), // Màu Coral
             ),
-            const SizedBox(height: 16),
+            const SizedBox(height: 20),
 
             // Mô tả
             Text(
-              figure.description ?? 'Không có mô tả chi tiết.',
-              style: Theme.of(context).textTheme.bodyLarge,
+              figure.description ?? noDescription, // ✅ Dịch: 'Không có mô tả chi tiết.'
+              style: Theme.of(context).textTheme.bodyLarge?.copyWith(color: kTitleTextColor),
               textAlign: TextAlign.justify,
             ),
-            const SizedBox(height: 24),
+            const SizedBox(height: 30),
 
             // Sự kiện liên quan
             FutureBuilder<List<Map<String, dynamic>>>(
@@ -80,24 +123,22 @@ class FigureDetailScreen extends StatelessWidget {
               future: DBHelper.getEventsByFigureId(figure.figureId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
-                  return const Center(child: CircularProgressIndicator());
+                  return const Center(child: CircularProgressIndicator(color: kPrimaryColor));
                 } else if (snapshot.hasError) {
-                  return Text('Lỗi tải sự kiện: ${snapshot.error}');
+                  return Text('$errorLoadEvent: ${snapshot.error}', style: const TextStyle(color: Colors.red)); // ✅ Dịch lỗi tải
                 } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
-                  // DÒNG NÀY SẼ HIỆN NẾU BẢNG 'event_figures' TRONG DB RỖNG
-                  return const Text('Không có sự kiện liên quan.');
+                  return Text(noRelatedEvent, style: TextStyle(color: kSubtextColor)); // ✅ Dịch: 'Không có sự kiện liên quan.'
                 }
 
                 final events = snapshot.data!;
                 return Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    const Text(
-                      '🗓 Sự kiện liên quan:',
-                      style:
-                      TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                    Text(
+                      '$eventRelated (${events.length}):', // ✅ Dịch: '🗓 Sự kiện liên quan'
+                      style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kAppBarColor),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 12),
 
                     ...events.map((event) {
                       DateTime? eventDate;
@@ -110,39 +151,42 @@ class FigureDetailScreen extends StatelessWidget {
                       }
 
                       return Card(
+                        color: kCardColor,
                         margin: const EdgeInsets.symmetric(vertical: 6),
-                        elevation: 3,
+                        elevation: 4,
+                        shadowColor: kPrimaryColor.withOpacity(0.2),
                         shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
+                          side: BorderSide(color: kPrimaryColor.withOpacity(0.1), width: 1),
                         ),
                         child: ListTile(
                           leading: event['image_url'] != null &&
                               event['image_url'].isNotEmpty
                               ? ClipRRect(
-                            borderRadius: BorderRadius.circular(6),
+                            borderRadius: BorderRadius.circular(8),
                             child: Image.network(
                               event['image_url'],
                               width: 50,
                               height: 50,
                               fit: BoxFit.cover,
                               errorBuilder: (_, __, ___) =>
-                              const Icon(Icons.broken_image),
+                              const Icon(Icons.broken_image, color: kPrimaryColor),
                             ),
                           )
-                              : const Icon(Icons.event, size: 40),
+                              : const Icon(Icons.event, size: 30, color: kPrimaryColor), // Icon Mint
                           title: Text(
-                            event['title'] ?? 'Không có tiêu đề',
-                            style: const TextStyle(fontWeight: FontWeight.w600),
+                            event['title'] ?? noTitle, // ✅ Dịch: 'Không có tiêu đề'
+                            style: const TextStyle(fontWeight: FontWeight.w700, color: kTitleTextColor),
                           ),
                           subtitle: Text(
-                            // Hiển thị ngày tháng đầy đủ nếu có, nếu không thì hiển thị năm
+                            // Sử dụng định dạng ngày theo ngôn ngữ
                             (eventDate != null && eventDate.year > 0)
-                                ? DateFormat('dd/MM/yyyy').format(eventDate)
+                                ? DateFormat(dateformat).format(eventDate)
                                 : event['year']?.toString() ?? '',
-                            style: const TextStyle(color: Colors.grey),
+                            style: const TextStyle(color: kSubtextColor),
                           ),
                           trailing:
-                          const Icon(Icons.arrow_forward_ios, size: 16),
+                          const Icon(Icons.arrow_forward_ios, size: 16, color: kAccentColor), // Icon Coral
                           onTap: () {
                             final eventId = event['event_id'] as int?; // Lấy ID
                             if (eventId != null) {
@@ -151,6 +195,7 @@ class FigureDetailScreen extends StatelessWidget {
                                 MaterialPageRoute(
                                   builder: (_) => EventDetailScreen(
                                     eventId: eventId, // TRUYỀN ID VÀO
+                                    userId: userId, // ✅ TRUYỀN userId
                                   ),
                                 ),
                               );

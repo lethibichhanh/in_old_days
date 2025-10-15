@@ -32,11 +32,14 @@ dependencies:
   # 🧩 Gọi API nếu cần (VD tải ảnh marker)
   http: ^1.2.2
 
-  # 🧩 Animation / hiệu ứng UI (không bắt buộc nhưng khuyến nghị)
+  # 🧩 Animation / hiệu ứng UI
   flutter_animate: ^4.5.0
 
-  # 🖼️ Thư viện xử lý ảnh (cần thiết cho _loadImageFromAssets trong EventMapScreen)
+  # 🖼️ Xử lý ảnh trong asset / DB
   image: ^4.2.0
+
+  # 📸 Chụp ảnh & chọn ảnh từ thư viện (đang thiếu)
+  image_picker: ^1.0.7
 
 dev_dependencies:
   flutter_test:

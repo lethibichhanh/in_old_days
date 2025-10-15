@@ -1,5 +1,8 @@
+// lib/screens/forgot_password_screen.dart
+
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
+import '../l10n/app_localizations.dart'; // ✅ THÊM IMPORT NGÔN NGỮ
 
 class ForgotPasswordScreen extends StatefulWidget {
   const ForgotPasswordScreen({super.key});
@@ -13,11 +16,25 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   bool _loading = false;
   String? _newPassword; // hiển thị mật khẩu mới (nếu reset thành công)
 
+  @override
+  void dispose() {
+    _emailCtrl.dispose();
+    super.dispose();
+  }
+
   Future<void> _resetPassword() async {
+    final tr = AppLocalizations.of(context)!;
+
+    // Khai báo chuỗi dịch cho thông báo lỗi/thành công
+    final pleaseEnterEmail = tr.translate('forgot_please_enter_email');
+    final accountNotFound = tr.translate('forgot_account_not_found');
+    final passwordResetSuccess = tr.translate('forgot_password_reset_success');
+    final errorPrefix = tr.translate('error_prefix'); // Sử dụng khóa chung nếu có
+
     final email = _emailCtrl.text.trim();
     if (email.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("⚠️ Vui lòng nhập email")),
+        SnackBar(content: Text(pleaseEnterEmail)), // ✅ Dịch
       );
       return;
     }
@@ -27,7 +44,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       final exists = await DBHelper.checkUserExists(email);
       if (!exists) {
         ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text("❌ Không tìm thấy tài khoản với email này.")),
+          SnackBar(content: Text(accountNotFound)), // ✅ Dịch
         );
         setState(() => _loading = false);
         return;
@@ -37,11 +54,11 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
       setState(() => _newPassword = newPass);
 
       ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text("✅ Mật khẩu đã được đặt lại!")),
+        SnackBar(content: Text(passwordResetSuccess)), // ✅ Dịch
       );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("❌ Lỗi: $e")),
+        SnackBar(content: Text('$errorPrefix: $e')), // ✅ Dịch tiền tố lỗi
       );
     } finally {
       setState(() => _loading = false);
@@ -49,15 +66,21 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
   }
 
   @override
-  void dispose() {
-    _emailCtrl.dispose();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
+    final tr = AppLocalizations.of(context)!;
+
+    // ✅ KHAI BÁO CÁC CHUỖI DỊCH CHO UI
+    final screenTitle = tr.translate('forgot_screen_title');
+    final instructionText = tr.translate('forgot_instruction_text');
+    final emailLabel = tr.translate('email_label'); // Khóa chung
+    final loadingText = tr.translate('loading_text'); // Khóa chung
+    final resetPasswordButton = tr.translate('forgot_reset_password_button');
+    final newPasswordTitle = tr.translate('forgot_new_password_title');
+    final newPasswordHint = tr.translate('forgot_new_password_hint');
+
+
     return Scaffold(
-      appBar: AppBar(title: const Text("Quên mật khẩu")),
+      appBar: AppBar(title: Text(screenTitle)), // ✅ Dịch
       body: Padding(
         padding: const EdgeInsets.all(20),
         child: Column(
@@ -65,7 +88,7 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
           children: [
             const SizedBox(height: 16),
             Text(
-              "Nhập email bạn đã dùng để đăng ký. Ứng dụng sẽ tạo mật khẩu mới cho bạn.",
+              instructionText, // ✅ Dịch
               style: Theme.of(context).textTheme.bodyMedium,
               textAlign: TextAlign.center,
             ),
@@ -73,10 +96,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
 
             TextField(
               controller: _emailCtrl,
-              decoration: const InputDecoration(
-                labelText: "Email",
-                prefixIcon: Icon(Icons.email_outlined),
-                border: OutlineInputBorder(),
+              decoration: InputDecoration(
+                labelText: emailLabel, // ✅ Dịch
+                prefixIcon: const Icon(Icons.email_outlined),
+                border: const OutlineInputBorder(),
               ),
               keyboardType: TextInputType.emailAddress,
             ),
@@ -89,17 +112,17 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 onPressed: _loading ? null : _resetPassword,
                 icon: const Icon(Icons.refresh),
                 label: _loading
-                    ? const Text("Đang xử lý...")
-                    : const Text("Đặt lại mật khẩu"),
+                    ? Text(loadingText) // ✅ Dịch: "Đang xử lý..."
+                    : Text(resetPasswordButton), // ✅ Dịch: "Đặt lại mật khẩu"
               ),
             ),
 
             const SizedBox(height: 30),
 
             if (_newPassword != null) ...[
-              const Text(
-                "🔑 Mật khẩu mới của bạn là:",
-                style: TextStyle(fontWeight: FontWeight.bold),
+              Text(
+                newPasswordTitle, // ✅ Dịch: "🔑 Mật khẩu mới của bạn là:"
+                style: const TextStyle(fontWeight: FontWeight.bold),
               ),
               const SizedBox(height: 8),
               SelectableText(
@@ -111,10 +134,10 @@ class _ForgotPasswordScreenState extends State<ForgotPasswordScreen> {
                 ),
               ),
               const SizedBox(height: 10),
-              const Text(
-                "(Hãy ghi lại mật khẩu này và đăng nhập lại bằng tài khoản của bạn)",
+              Text(
+                newPasswordHint, // ✅ Dịch: "(Hãy ghi lại mật khẩu này...)"
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.grey),
+                style: const TextStyle(color: Colors.grey),
               ),
             ],
           ],

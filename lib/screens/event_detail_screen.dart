@@ -1,19 +1,30 @@
+// File: event_detail_screen.dart
+
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import '../db/db_helper.dart';
 import '../models/event.dart';
 import 'package:maplibre_gl/maplibre_gl.dart' as maplibre;
 import 'package:flutter/services.dart';
+import '../l10n/app_localizations.dart';
+
+// --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ) ---
+const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
+const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
+const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà
+const Color kCardColor = Colors.white;
+const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
+const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
 
 class EventDetailScreen extends StatefulWidget {
   final int eventId;
-  // ✅ THÊM userId (nullable) để nhận ID người dùng đã đăng nhập
   final int? userId;
 
   const EventDetailScreen({
     super.key,
     required this.eventId,
-    this.userId // Nhận userId từ HomeScreen/FavoriteScreen
+    this.userId,
   });
 
   @override
@@ -26,6 +37,10 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
   bool _isFavorite = false;
   maplibre.MaplibreMapController? _mapController;
 
+  String _getText(String key) {
+    return AppLocalizations.of(context)?.translate(key) ?? key;
+  }
+
   @override
   void initState() {
     super.initState();
@@ -34,21 +49,18 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   void dispose() {
+    _mapController?.onSymbolTapped.clear();
     _mapController = null;
     super.dispose();
   }
 
-  /// 📦 Lấy dữ liệu sự kiện + kiểm tra yêu thích
   Future<void> _loadEvent() async {
     try {
       final e = await DBHelper.getEventById(widget.eventId);
-
       bool isFav = false;
-      // 🔄 KIỂM TRA YÊU THÍCH: Chỉ kiểm tra nếu có userId
       if (widget.userId != null) {
         isFav = await DBHelper.isFavorite(widget.eventId, userId: widget.userId!);
       }
-
       setState(() {
         _event = e != null ? EventModel.fromMap(e) : null;
         _isFavorite = isFav;
@@ -60,35 +72,24 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     }
   }
 
-  /// ❤️ Thêm / xoá yêu thích
+  /// ❤️ Thêm / xoá yêu thích (bỏ kiểm tra đăng nhập)
   Future<void> _toggleFavorite() async {
     if (_event == null) return;
-
-    // ⚠️ XỬ LÝ CHƯA ĐĂNG NHẬP
-    if (widget.userId == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(
-          content: Text("⚠️ Vui lòng đăng nhập để lưu sự kiện yêu thích."),
-          backgroundColor: Colors.orange,
-        ),
-      );
-      return;
-    }
+    final tr = AppLocalizations.of(context)!;
 
     try {
-      // ✅ SỬ DỤNG userId THỰC TẾ
       if (_isFavorite) {
-        await DBHelper.removeFavorite(widget.eventId, userId: widget.userId!);
+        await DBHelper.removeFavorite(widget.eventId, userId: widget.userId ?? 0);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("💔 Đã xoá khỏi danh sách yêu thích")),
+            SnackBar(content: Text(tr.translate('favorite_removed'))),
           );
         }
       } else {
-        await DBHelper.addFavorite(widget.eventId, userId: widget.userId!);
+        await DBHelper.addFavorite(widget.eventId, userId: widget.userId ?? 0);
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(content: Text("❤️ Đã thêm vào danh sách yêu thích")),
+            SnackBar(content: Text(tr.translate('favorite_added'))),
           );
         }
       }
@@ -96,17 +97,17 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     } catch (e) {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("⚠️ Lỗi khi cập nhật yêu thích: $e")),
+          SnackBar(content: Text(tr.translate('favorite_error'))),
         );
       }
     }
   }
 
-  /// 🖼️ Hiển thị hình ảnh (Giữ nguyên)
+  /// 🖼️ Hiển thị hình ảnh
   Widget _buildImageWidget(String? imageUrl) {
     if (imageUrl == null || imageUrl.trim().isEmpty) {
-      return const Center(
-        child: Icon(Icons.image_not_supported, size: 80, color: Colors.grey),
+      return Center(
+        child: Icon(Icons.image_not_supported, size: 80, color: kSubtextColor),
       );
     }
 
@@ -119,8 +120,8 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         height: 220,
         width: double.infinity,
         fit: BoxFit.cover,
-        errorBuilder: (_, __, ___) => const Center(
-          child: Icon(Icons.broken_image, size: 80, color: Colors.grey),
+        errorBuilder: (_, __, ___) => Center(
+          child: Icon(Icons.broken_image, size: 80, color: kSubtextColor),
         ),
       );
     } else {
@@ -141,7 +142,7 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         future: _tryLoadAsset(candidates),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: CircularProgressIndicator(color: kPrimaryColor));
           }
           if (snapshot.hasData && snapshot.data != null) {
             return Image.asset(
@@ -149,13 +150,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
               height: 220,
               width: double.infinity,
               fit: BoxFit.cover,
-              errorBuilder: (_, __, ___) => const Center(
-                  child: Icon(Icons.broken_image, size: 80, color: Colors.grey)
+              errorBuilder: (_, __, ___) => Center(
+                child: Icon(Icons.broken_image, size: 80, color: kSubtextColor),
               ),
             );
           }
-          return const Center(
-            child: Icon(Icons.broken_image, size: 80, color: Colors.grey),
+          return Center(
+            child: Icon(Icons.broken_image, size: 80, color: kSubtextColor),
           );
         },
       );
@@ -166,44 +167,51 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
     for (var path in candidates) {
       try {
         await rootBundle.load(path);
-        debugPrint("✅ Tìm thấy asset: $path");
         return path;
       } catch (_) {}
     }
     return null;
   }
 
-  /// 🗺️ Hiển thị bản đồ (Giữ nguyên)
+  /// 🗺️ Hiển thị bản đồ
   Widget _buildMapWidget() {
     if (_event?.latitude == null || _event?.longitude == null) {
       return const SizedBox.shrink();
     }
 
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(12),
-      child: SizedBox(
-        height: 300,
-        child: maplibre.MaplibreMap(
-          styleString: 'https://demotiles.maplibre.org/style.json',
-          initialCameraPosition: maplibre.CameraPosition(
-            target: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
-            zoom: 6.0,
+    return Card(
+      elevation: 6,
+      shadowColor: kPrimaryColor.withOpacity(0.4),
+      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          height: 300,
+          child: maplibre.MaplibreMap(
+            styleString: 'https://demotiles.maplibre.org/style.json',
+            initialCameraPosition: maplibre.CameraPosition(
+              target: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
+              zoom: 6.0,
+            ),
+            myLocationEnabled: false,
+            compassEnabled: false,
+            onMapCreated: (controller) async {
+              _mapController = controller;
+              await _mapController!.addSymbol(
+                maplibre.SymbolOptions(
+                  geometry: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
+                  textField: _event!.title ?? _getText('event_default_name'),
+                  textSize: 12.0,
+                  textColor: kTitleTextColor.toHexString(),
+                  textHaloColor: kCardColor.toHexString(),
+                  textHaloWidth: 1.0,
+                  textOffset: const Offset(0, 1.5),
+                  iconImage: "marker-15",
+                  iconAnchor: 'bottom',
+                ),
+              );
+            },
           ),
-          myLocationEnabled: false,
-          compassEnabled: false,
-          onMapCreated: (controller) async {
-            _mapController = controller;
-            await _mapController!.addSymbol(
-              maplibre.SymbolOptions(
-                geometry: maplibre.LatLng(_event!.latitude!, _event!.longitude!),
-                textField: _event!.title ?? 'Sự kiện',
-                textSize: 12.0,
-                textOffset: const Offset(0, 1.5),
-                iconImage: "marker-15",
-                iconAnchor: 'bottom', // Sử dụng chuỗi hằng số cho anchor
-              ),
-            );
-          },
         ),
       ),
     );
@@ -211,150 +219,141 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
 
   @override
   Widget build(BuildContext context) {
+    final tr = AppLocalizations.of(context)!;
+    final title = tr.translate('detail_title');
+    final datePrefix = tr.translate('date_prefix_long');
+    final yearPrefix = tr.translate('year_prefix_long');
+    final dateUnknown = tr.translate('date_unknown');
+    final eventNotExist = tr.translate('event_not_exist');
+    final sourcePrefix = tr.translate('source_prefix');
+    final mapLocation = tr.translate('map_location');
+    final locationName = tr.translate('location_name');
+    final regionName = tr.translate('region_name');
+    final savedFavorite = tr.translate('saved_favorite');
+    final saveFavorite = tr.translate('save_favorite');
+
     return Scaffold(
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: const Text('Chi tiết sự kiện'),
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        backgroundColor: kAppBarColor,
+        foregroundColor: Colors.white,
+        elevation: 0,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
-          onPressed: () => Navigator.pop(context, _isFavorite), // Quay lại và truyền trạng thái yêu thích
+          onPressed: () => Navigator.pop(context, _isFavorite),
         ),
         actions: [
-          // 💡 Chỉ hiển thị nút yêu thích nếu có userId (hoặc luôn hiển thị và xử lý click)
-          if (widget.userId != null || _isFavorite) // Hiển thị nút nếu đã đăng nhập HOẶC đã là yêu thích (tránh giật)
-            IconButton(
-              onPressed: _toggleFavorite,
-              icon: AnimatedSwitcher(
-                duration: const Duration(milliseconds: 300),
-                transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
-                child: Icon(
-                  _isFavorite ? Icons.favorite : Icons.favorite_border,
-                  key: ValueKey(_isFavorite),
-                  color: _isFavorite ? Colors.red : Colors.white,
-                ),
+          IconButton(
+            onPressed: _toggleFavorite,
+            icon: AnimatedSwitcher(
+              duration: const Duration(milliseconds: 300),
+              transitionBuilder: (child, anim) => ScaleTransition(scale: anim, child: child),
+              child: Icon(
+                _isFavorite ? Icons.favorite : Icons.favorite_border,
+                key: ValueKey(_isFavorite),
+                color: _isFavorite ? kAccentColor : Colors.white,
               ),
             ),
+          ),
         ],
       ),
       body: _loading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: kPrimaryColor))
           : (_event == null)
-          ? const Center(
+          ? Center(
         child: Text(
-          '❌ Sự kiện không tồn tại hoặc đã bị xóa.',
-          style: TextStyle(fontSize: 16),
+          eventNotExist,
+          textAlign: TextAlign.center,
+          style: const TextStyle(fontSize: 16, color: kTitleTextColor),
         ),
       )
           : SingleChildScrollView(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // 🎯 Tiêu đề
             Text(
               _event!.title,
               style: const TextStyle(
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
+                fontSize: 26,
+                fontWeight: FontWeight.w900,
+                color: kTitleTextColor,
               ),
-            ),
-            const SizedBox(height: 8),
-
-            // 📅 Thời gian
-            Text(
-              _event!.date != null
-                  ? '📆 Ngày: ${DateFormat('dd/MM/yyyy').format(_event!.date!)}'
-                  : (_event!.year != null
-                  ? '📆 Năm: ${_event!.year}'
-                  : '📆 Ngày: Không rõ'),
-              style: const TextStyle(fontSize: 16),
             ),
             const SizedBox(height: 12),
-
-            // 🖼️ Ảnh
-            ClipRRect(
-              borderRadius: BorderRadius.circular(12),
-              child: SizedBox(
-                height: 220,
-                width: double.infinity,
-                child: _buildImageWidget(_event!.imageUrl),
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+              decoration: BoxDecoration(
+                color: kPrimaryColor.withOpacity(0.1),
+                borderRadius: BorderRadius.circular(8),
+              ),
+              child: Text(
+                _event!.date != null
+                    ? '$datePrefix: ${DateFormat('dd/MM/yyyy').format(_event!.date!)}'
+                    : (_event!.year != null
+                    ? '$yearPrefix: ${_event!.year}'
+                    : '$datePrefix: $dateUnknown'),
+                style: TextStyle(fontSize: 16, fontWeight: FontWeight.bold, color: kPrimaryColor),
               ),
             ),
-            const SizedBox(height: 16),
-
-            // 📖 Mô tả
+            const SizedBox(height: 20),
+            Card(
+              elevation: 6,
+              shadowColor: kPrimaryColor.withOpacity(0.4),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+              child: ClipRRect(
+                borderRadius: BorderRadius.circular(16),
+                child: SizedBox(height: 220, width: double.infinity, child: _buildImageWidget(_event!.imageUrl)),
+              ),
+            ),
+            const SizedBox(height: 20),
             if ((_event!.description ?? '').isNotEmpty)
               Text(
                 _event!.description!,
-                style: const TextStyle(fontSize: 16, height: 1.4),
+                style: const TextStyle(fontSize: 16, height: 1.4, color: kTitleTextColor),
+                textAlign: TextAlign.justify,
               ),
-            const SizedBox(height: 16),
-
-            // 📚 Nguồn
+            const SizedBox(height: 20),
             if ((_event!.source ?? '').isNotEmpty)
               Text(
-                '📚 Nguồn: ${_event!.source}',
-                style: const TextStyle(
-                  fontStyle: FontStyle.italic,
-                  color: Colors.grey,
-                ),
+                '$sourcePrefix: ${_event!.source}',
+                style: TextStyle(fontStyle: FontStyle.italic, color: kSubtextColor),
               ),
-            const SizedBox(height: 16),
-
-            // 🗺️ Bản đồ
+            const SizedBox(height: 20),
             if (_event!.latitude != null && _event!.longitude != null) ...[
-              const Text(
-                "🗺️ Vị trí sự kiện:",
-                style: TextStyle(
-                  fontWeight: FontWeight.bold,
-                  fontSize: 18,
-                ),
+              Text(
+                mapLocation,
+                style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 18, color: kAppBarColor),
               ),
-              const SizedBox(height: 8),
+              const SizedBox(height: 12),
               _buildMapWidget(),
-              const SizedBox(height: 16),
+              const SizedBox(height: 20),
             ],
-
-            // 📍 Địa điểm
             if ((_event!.locationName?.isNotEmpty ?? false))
               Text(
-                '📍 Địa điểm: ${_event!.locationName}',
-                style: const TextStyle(fontSize: 16),
+                '$locationName: ${_event!.locationName}',
+                style: const TextStyle(fontSize: 16, color: kTitleTextColor),
               ),
             if ((_event!.region?.isNotEmpty ?? false))
               Text(
-                '🌍 Khu vực: ${_event!.region}',
-                style: const TextStyle(fontSize: 16),
+                '$regionName: ${_event!.region}',
+                style: const TextStyle(fontSize: 16, color: kTitleTextColor),
               ),
-
             const SizedBox(height: 32),
-
-            // ❤️ Nút lưu sự kiện yêu thích
             Center(
               child: ElevatedButton.icon(
                 style: ElevatedButton.styleFrom(
-                  backgroundColor: _isFavorite ? Colors.red : Colors.blue,
+                  backgroundColor: _isFavorite ? kAccentColor : kPrimaryColor,
                   padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(12),
-                  ),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(30)),
+                  elevation: 6,
                 ),
                 onPressed: _toggleFavorite,
-                icon: Icon(
-                  _isFavorite ? Icons.favorite : Icons.favorite_border,
-                  color: Colors.white,
-                ),
+                icon: Icon(_isFavorite ? Icons.favorite : Icons.favorite_border, color: Colors.white),
                 label: Text(
-                  // 💡 Thay đổi nội dung nút nếu chưa đăng nhập
-                  widget.userId == null
-                      ? 'Đăng nhập để lưu yêu thích'
-                      : _isFavorite
-                      ? 'Đã lưu vào yêu thích'
-                      : 'Lưu lại sự kiện yêu thích',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    fontWeight: FontWeight.w500,
-                  ),
+                  _isFavorite ? savedFavorite : saveFavorite,
+                  style: const TextStyle(color: Colors.white, fontSize: 16, fontWeight: FontWeight.w700),
                 ),
               ),
             ),
@@ -363,5 +362,13 @@ class _EventDetailScreenState extends State<EventDetailScreen> {
         ),
       ),
     );
+  }
+}
+
+// 🧩 Chuyển Color -> Hex
+extension HexColor on Color {
+  String toHexString({bool withHash = true}) {
+    final hex = value.toRadixString(16).padLeft(8, '0');
+    return (withHash ? '#' : '') + hex.substring(2);
   }
 }

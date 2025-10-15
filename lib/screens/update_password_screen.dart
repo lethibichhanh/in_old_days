@@ -3,6 +3,17 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import '../models/user_model.dart';
+import '../l10n/app_localizations.dart'; // ✅ THÊM IMPORT NGÔN NGỮ
+
+// --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ) ---
+const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
+const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
+const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà
+const Color kCardColor = Colors.white;
+const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
+const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
+
 
 class UpdatePasswordScreen extends StatefulWidget {
   const UpdatePasswordScreen({super.key});
@@ -13,35 +24,37 @@ class UpdatePasswordScreen extends StatefulWidget {
 
 class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   UserModel? _user;
-  int? _userIdFromArgs; // Biến để lưu ID được truyền vào
+  int? _userIdFromArgs;
 
   final _currentPasswordController = TextEditingController();
   final _newPasswordController = TextEditingController();
   final _confirmPasswordController = TextEditingController();
 
-  bool _isLoading = true; // Bắt đầu loading
+  bool _isLoading = true;
   bool _isCurrentPasswordVisible = false;
   bool _isNewPasswordVisible = false;
   bool _isConfirmPasswordVisible = false;
 
-  String _passwordStrength = "Rất yếu (0/100)";
+  String _passwordStrength = ""; // Sẽ được gán giá trị dịch trong build/checkStrength
   Color _strengthColor = Colors.red;
+
+  late AppLocalizations tr; // Khai báo biến dịch
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
+    tr = AppLocalizations.of(context)!; // Khởi tạo biến dịch
 
     if (_user == null && _userIdFromArgs == null) {
       final args = ModalRoute.of(context)?.settings.arguments;
       debugPrint("📦 Arguments nhận được: $args");
 
-      // 1. Lấy ID từ Arguments (Dù là int trực tiếp hay Map)
+      // 1. Lấy ID từ Arguments (Giữ nguyên logic tải ID)
       if (args is int) {
         _userIdFromArgs = args;
       } else if (args is UserModel) {
         _userIdFromArgs = args.id;
       } else if (args is Map<String, dynamic>) {
-        // Nếu ProfileScreen truyền {'userId': id} như code cũ
         _userIdFromArgs = args['userId'] is int ? args['userId'] : int.tryParse(args['userId']?.toString() ?? '');
       }
 
@@ -49,7 +62,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       if (_userIdFromArgs != null) {
         _loadUserById(_userIdFromArgs!);
       } else {
-        // 3. Fallback: Nếu không có ID, tải user đầu tiên (Ít tin cậy hơn)
+        // 3. Fallback
         debugPrint("❌ Không tìm thấy ID từ arguments, đang thử lấy từ DB...");
         _loadUserFromDatabase();
       }
@@ -57,6 +70,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
   }
 
   Future<void> _loadUserById(int id) async {
+    final userNotFound = tr.translate('update_password_user_not_found');
+
     try {
       final user = await DBHelper.getUserById(id);
       if (mounted) {
@@ -68,7 +83,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
           debugPrint("✅ Đã nạp user theo ID: ${user.email}");
         } else {
           debugPrint("⚠️ Không tìm thấy user với ID: $id");
-          _showSnackBar("⚠️ Không tìm thấy tài khoản để đổi mật khẩu.");
+          _showSnackBar(userNotFound); // ✅ Dịch
         }
       }
     } catch (e) {
@@ -79,6 +94,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
 
   // Hàm Fallback (chỉ dùng khi không có ID)
   Future<void> _loadUserFromDatabase() async {
+    final noLoggedInAccount = tr.translate('update_password_no_account');
+
     try {
       final users = await DBHelper.getAllUsers();
       if (mounted) {
@@ -90,7 +107,7 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
           debugPrint("✅ Đã nạp user từ DB (Fallback): ${_user!.email}");
         } else {
           debugPrint("⚠️ Không có người dùng nào trong DB!");
-          _showSnackBar("⚠️ Không có tài khoản nào được đăng nhập.");
+          _showSnackBar(noLoggedInAccount); // ✅ Dịch
         }
       }
     } catch (e) {
@@ -109,6 +126,8 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
 
   // ================== 🔐 TẠO MẬT KHẨU NGẪU NHIÊN ==================
   void _generateRandomPassword() {
+    final passwordGenerated = tr.translate('update_password_generated');
+
     const String chars =
         'abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#\$%^&*()_-+=<>?';
     final rand = Random.secure();
@@ -117,12 +136,16 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     _newPasswordController.text = password;
     _confirmPasswordController.text = password;
     _checkPasswordStrength(password);
-    _showSnackBar("🔑 Đã tạo mật khẩu ngẫu nhiên!");
+    _showSnackBar(passwordGenerated); // ✅ Dịch
   }
 
   // ================== 📊 KIỂM TRA ĐỘ MẠNH MẬT KHẨU ==================
   void _checkPasswordStrength(String password) {
-    // ... (Giữ nguyên logic kiểm tra độ mạnh)
+    // Lấy chuỗi dịch cho độ mạnh
+    final strengthWeak = tr.translate('password_strength_weak');
+    final strengthMedium = tr.translate('password_strength_medium');
+    final strengthStrong = tr.translate('password_strength_strong');
+
     int score = 0;
 
     if (password.length >= 6) score += 25;
@@ -132,13 +155,13 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     if (RegExp(r'[!@#\$%^&*(),.?":{}|<>]').hasMatch(password)) score += 20;
 
     if (score <= 30) {
-      _passwordStrength = "Rất yếu ($score/100)";
+      _passwordStrength = "$strengthWeak ($score/100)"; // ✅ Dịch
       _strengthColor = Colors.red;
     } else if (score <= 60) {
-      _passwordStrength = "Trung bình ($score/100)";
+      _passwordStrength = "$strengthMedium ($score/100)"; // ✅ Dịch
       _strengthColor = Colors.orange;
     } else {
-      _passwordStrength = "Mạnh ($score/100)";
+      _passwordStrength = "$strengthStrong ($score/100)"; // ✅ Dịch
       _strengthColor = Colors.green;
     }
 
@@ -147,9 +170,19 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
 
   // ================== 🧭 XỬ LÝ CẬP NHẬT MẬT KHẨU ==================
   Future<void> _updatePassword() async {
-    // Logic này được giữ nguyên, nó sẽ kiểm tra _user sau khi đã được tải
+    // Lấy chuỗi dịch cho thông báo lỗi/thành công
+    final userInvalid = tr.translate('update_password_user_invalid');
+    final fillInfo = tr.translate('update_password_fill_info');
+    final minLength = tr.translate('update_password_min_length');
+    final notMatch = tr.translate('update_password_not_match');
+    final wrongCurrentPass = tr.translate('update_password_wrong_current');
+    final success = tr.translate('update_password_success');
+    final noChange = tr.translate('update_password_no_change');
+    final errorUpdate = tr.translate('update_password_error_update');
+
+
     if (_user == null || _user!.id == null) {
-      _showSnackBar("❌ Thông tin người dùng không hợp lệ.");
+      _showSnackBar(userInvalid); // ✅ Dịch
       return;
     }
 
@@ -160,24 +193,24 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
     if (currentPassword.isEmpty ||
         newPassword.isEmpty ||
         confirmPassword.isEmpty) {
-      _showSnackBar("⚠️ Vui lòng nhập đầy đủ thông tin.");
+      _showSnackBar(fillInfo); // ✅ Dịch
       return;
     }
 
     if (newPassword.length < 6) {
-      _showSnackBar("❌ Mật khẩu mới phải có ít nhất 6 ký tự.");
+      _showSnackBar(minLength); // ✅ Dịch
       return;
     }
 
     if (newPassword != confirmPassword) {
-      _showSnackBar("❌ Mật khẩu mới và xác nhận không khớp.");
+      _showSnackBar(notMatch); // ✅ Dịch
       return;
     }
 
-    // ⚠️ So sánh password hiện tại với hash trong DB
+    // So sánh password hiện tại với hash trong DB
     final currentHash = _user!.passwordHash;
     if (currentHash.isEmpty || currentPassword != currentHash) {
-      _showSnackBar("❌ Mật khẩu hiện tại không đúng hoặc chưa được đặt.");
+      _showSnackBar(wrongCurrentPass); // ✅ Dịch
       return;
     }
 
@@ -192,14 +225,14 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       final result = await DBHelper.updateUser(updatedUser);
 
       if (result > 0) {
-        _showSnackBar("✅ Đổi mật khẩu thành công!");
+        _showSnackBar(success); // ✅ Dịch
         Navigator.pop(context, updatedUser);
       } else {
-        _showSnackBar("⚠️ Không có thay đổi nào được lưu.");
+        _showSnackBar(noChange); // ✅ Dịch
       }
     } catch (e) {
       debugPrint("❌ Lỗi cập nhật mật khẩu: $e");
-      _showSnackBar("❌ Lỗi cập nhật: $e");
+      _showSnackBar('$errorUpdate: $e'); // ✅ Dịch
     } finally {
       if (mounted) setState(() => _isLoading = false);
     }
@@ -215,145 +248,172 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Khởi động lại kiểm tra độ mạnh khi build để cập nhật ngôn ngữ
+    if (_newPasswordController.text.isNotEmpty) {
+      _checkPasswordStrength(_newPasswordController.text);
+    } else if (!_isLoading) {
+      // Thiết lập giá trị mặc định khi không loading và không có pass
+      _passwordStrength = tr.translate('password_strength_very_weak'); // ✅ Dịch
+      _strengthColor = Colors.red;
+    }
+
+    // ✅ KHAI BÁO CÁC CHUỖI DỊCH CHO UI
+    final screenTitle = tr.translate('update_password_title');
+    final loadingError = tr.translate('update_password_load_error'); // Khóa mới
+    final changeSecurity = tr.translate('update_password_change_security');
+    final labelCurrentPass = tr.translate('update_password_current_label');
+    final labelNewPass = tr.translate('update_password_new_label');
+    final labelConfirmPass = tr.translate('update_password_confirm_label');
+    final strengthLabel = tr.translate('password_strength_label');
+    final generatePassword = tr.translate('update_password_generate_button');
+    final updateButton = tr.translate('update_password_update_button');
+
+
     return Scaffold(
+      backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: const Text("Đổi mật khẩu"),
-        backgroundColor: Colors.indigo,
+        title: Text(screenTitle, style: const TextStyle(fontWeight: FontWeight.bold, color: Colors.white)), // ✅ Dịch
+        backgroundColor: kAppBarColor,
         foregroundColor: Colors.white,
+        elevation: 0,
       ),
-      // Thay đổi logic kiểm tra _user thành _isLoading
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: CircularProgressIndicator(color: kPrimaryColor))
           : _user == null
-          ? const Center(child: Text("Không thể tải thông tin người dùng."))
-          : Stack(
-        children: [
-          // ... (Phần UI Stack được giữ nguyên)
-          Container(
-            decoration: const BoxDecoration(
-              gradient: LinearGradient(
-                colors: [Color(0xFF6D83F2), Color(0xFF8EC5FC)],
-                begin: Alignment.topCenter,
-                end: Alignment.bottomCenter,
-              ),
-            ),
+          ? Center(child: Text(loadingError)) // ✅ Dịch
+          : SingleChildScrollView(
+        padding: const EdgeInsets.all(24),
+        child: Card(
+          elevation: 8,
+          color: kCardColor,
+          shape: RoundedRectangleBorder(
+            borderRadius: BorderRadius.circular(20),
+            side: BorderSide(color: kPrimaryColor.withOpacity(0.3), width: 1.5),
           ),
-          SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Card(
-              elevation: 10,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(24),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
+          child: Padding(
+            padding: const EdgeInsets.all(24),
+            child: Column(
+              children: [
+                const Icon(Icons.lock_reset,
+                    size: 80, color: kAppBarColor),
+                const SizedBox(height: 16),
+                Text(
+                  changeSecurity, // ✅ Dịch
+                  style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      color: kTitleTextColor
+                  ),
+                ),
+                const SizedBox(height: 24),
+
+                // Mật khẩu hiện tại
+                _buildPasswordField(
+                  controller: _currentPasswordController,
+                  label: labelCurrentPass, // ✅ Dịch
+                  icon: Icons.lock_outline,
+                  isVisible: _isCurrentPasswordVisible,
+                  onToggleVisibility: () {
+                    setState(() => _isCurrentPasswordVisible =
+                    !_isCurrentPasswordVisible);
+                  },
+                ),
+                const SizedBox(height: 18),
+
+                // Mật khẩu mới
+                _buildPasswordField(
+                  controller: _newPasswordController,
+                  label: labelNewPass, // ✅ Dịch
+                  icon: Icons.lock,
+                  isVisible: _isNewPasswordVisible,
+                  onToggleVisibility: () {
+                    setState(() => _isNewPasswordVisible =
+                    !_isNewPasswordVisible);
+                  },
+                  onChanged: _checkPasswordStrength,
+                ),
+                const SizedBox(height: 8),
+
+                // Độ mạnh & Tạo mật khẩu
+                Row(
                   children: [
-                    const Icon(Icons.lock_reset,
-                        size: 80, color: Colors.indigo),
-                    const SizedBox(height: 24),
-                    _buildPasswordField(
-                      controller: _currentPasswordController,
-                      label: "Mật khẩu hiện tại",
-                      icon: Icons.lock_outline,
-                      isVisible: _isCurrentPasswordVisible,
-                      onToggleVisibility: () {
-                        setState(() => _isCurrentPasswordVisible =
-                        !_isCurrentPasswordVisible);
-                      },
+                    Text('$strengthLabel:', // ✅ Dịch
+                        style: TextStyle(color: kSubtextColor)),
+                    const SizedBox(width: 8),
+                    Text(
+                      _passwordStrength, // Đã được dịch trong _checkPasswordStrength
+                      style: TextStyle(
+                          fontWeight: FontWeight.bold,
+                          color: _strengthColor),
                     ),
-                    const SizedBox(height: 16),
-                    _buildPasswordField(
-                      controller: _newPasswordController,
-                      label: "Mật khẩu mới",
-                      icon: Icons.lock,
-                      isVisible: _isNewPasswordVisible,
-                      onToggleVisibility: () {
-                        setState(() => _isNewPasswordVisible =
-                        !_isNewPasswordVisible);
-                      },
-                      onChanged: _checkPasswordStrength,
-                    ),
-                    const SizedBox(height: 8),
-                    Row(
-                      children: [
-                        Text("Độ mạnh:",
-                            style: TextStyle(color: Colors.grey[700])),
-                        const SizedBox(width: 8),
-                        Text(
-                          _passwordStrength,
-                          style: TextStyle(
-                              fontWeight: FontWeight.bold,
-                              color: _strengthColor),
-                        ),
-                        const Spacer(),
-                        TextButton.icon(
-                          onPressed: _generateRandomPassword,
-                          icon: const Icon(Icons.refresh),
-                          label: const Text("Tạo mật khẩu"),
-                        ),
-                      ],
-                    ),
-                    const SizedBox(height: 16),
-                    _buildPasswordField(
-                      controller: _confirmPasswordController,
-                      label: "Xác nhận mật khẩu mới",
-                      icon: Icons.check_circle_outline,
-                      isVisible: _isConfirmPasswordVisible,
-                      onToggleVisibility: () {
-                        setState(() => _isConfirmPasswordVisible =
-                        !_isConfirmPasswordVisible);
-                      },
-                    ),
-                    const SizedBox(height: 30),
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed:
-                        _isLoading ? null : _updatePassword,
-                        icon: _isLoading
-                            ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
-                            color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : const Icon(Icons.security_update),
-                        label: const Text(
-                          "Đổi Mật Khẩu",
-                          style: TextStyle(
-                              fontSize: 16,
-                              fontWeight: FontWeight.bold),
-                        ),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: Colors.indigo,
-                          foregroundColor: Colors.white,
-                          padding: const EdgeInsets.symmetric(
-                              vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                        ),
-                      ),
+                    const Spacer(),
+                    TextButton.icon(
+                      onPressed: _generateRandomPassword,
+                      icon: const Icon(Icons.refresh, color: kAppBarColor),
+                      label: Text(generatePassword, style: TextStyle(color: kAppBarColor, fontWeight: FontWeight.w600)), // ✅ Dịch
                     ),
                   ],
                 ),
-              ),
+                const SizedBox(height: 18),
+
+                // Xác nhận mật khẩu mới
+                _buildPasswordField(
+                  controller: _confirmPasswordController,
+                  label: labelConfirmPass, // ✅ Dịch
+                  icon: Icons.check_circle_outline,
+                  isVisible: _isConfirmPasswordVisible,
+                  onToggleVisibility: () {
+                    setState(() => _isConfirmPasswordVisible =
+                    !_isConfirmPasswordVisible);
+                  },
+                ),
+                const SizedBox(height: 30),
+
+                // Nút Đổi Mật Khẩu
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed:
+                    _isLoading ? null : _updatePassword,
+                    icon: _isLoading
+                        ? const SizedBox(
+                      width: 22,
+                      height: 22,
+                      child: CircularProgressIndicator(
+                        color: Colors.white,
+                        strokeWidth: 2,
+                      ),
+                    )
+                        : const Icon(Icons.security_update, color: Colors.white),
+                    label: Text(
+                      updateButton, // ✅ Dịch
+                      style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                          color: Colors.white),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kAccentColor,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                          vertical: 16),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      elevation: 6,
+                    ),
+                  ),
+                ),
+              ],
             ),
           ),
-          if (_isLoading)
-            Container(
-              color: Colors.black.withOpacity(0.3),
-              child: const Center(
-                  child: CircularProgressIndicator(color: Colors.white)),
-            ),
-        ],
+        ),
       ),
+      // Không cần FAB/Overlay nếu đã dùng _isLoading
     );
   }
 
+  // Widget _buildPasswordField đã được tùy chỉnh
   Widget _buildPasswordField({
     required TextEditingController controller,
     required String label,
@@ -368,20 +428,26 @@ class _UpdatePasswordScreenState extends State<UpdatePasswordScreen> {
       keyboardType: TextInputType.visiblePassword,
       onChanged: onChanged,
       decoration: InputDecoration(
-        labelText: label,
-        prefixIcon: Icon(icon, color: Colors.indigo),
+        labelText: label, // ✅ Dịch label được truyền vào
+        labelStyle: const TextStyle(color: kSubtextColor),
+        prefixIcon: Icon(icon, color: kPrimaryColor),
         suffixIcon: IconButton(
           icon: Icon(
             isVisible ? Icons.visibility : Icons.visibility_off,
-            color: Colors.grey,
+            color: kPrimaryColor,
           ),
           onPressed: onToggleVisibility,
         ),
         filled: true,
-        fillColor: Colors.white,
+        fillColor: kPrimaryColor.withOpacity(0.05),
+
         border: OutlineInputBorder(
-          borderRadius: BorderRadius.circular(16),
-          borderSide: BorderSide.none,
+          borderRadius: BorderRadius.circular(12),
+          borderSide: BorderSide(color: kPrimaryColor.withOpacity(0.5)),
+        ),
+        focusedBorder: OutlineInputBorder(
+          borderRadius: BorderRadius.circular(12),
+          borderSide: const BorderSide(color: kAppBarColor, width: 2),
         ),
       ),
     );

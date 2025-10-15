@@ -4,6 +4,15 @@ import '../l10n/app_localizations.dart';
 import '../main.dart';
 import '../models/user_model.dart';
 
+// --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ với HomeScreen) ---
+const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
+const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
+const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà
+const Color kCardColor = Colors.white;
+const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
+const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
+
 enum AppLanguage { vi, en, zh }
 
 class LoginScreen extends StatefulWidget {
@@ -67,9 +76,9 @@ class _LoginScreenState extends State<LoginScreen> {
     }
   }
 
-  // 🔹 Chuyển ngôn ngữ (fix cú pháp switch expression)
+  // 🔹 Chuyển ngôn ngữ
   void _changeLanguage(AppLanguage newLanguage) {
-    String code = 'en'; // Mặc định tiếng Anh
+    String code = 'en';
 
     switch (newLanguage) {
       case AppLanguage.vi:
@@ -95,7 +104,6 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
-    final theme = Theme.of(context);
     final tr = AppLocalizations.of(context);
 
     if (tr == null) {
@@ -105,10 +113,15 @@ class _LoginScreenState extends State<LoginScreen> {
     }
 
     return Scaffold(
-      appBar: AppBar(
+      // Nền chính sử dụng màu Pastel
+      backgroundColor: kBackgroundColor,
 
+      // AppBar trong suốt
+      appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
+        // Điều chỉnh màu icon cho nền sáng
+        iconTheme: const IconThemeData(color: kTitleTextColor),
         actions: [
           PopupMenuButton<AppLanguage>(
             onSelected: _changeLanguage,
@@ -126,155 +139,164 @@ class _LoginScreenState extends State<LoginScreen> {
                 child: Text('🇨🇳 中文'),
               ),
             ],
-            icon: const Icon(Icons.language, color: Colors.white),
+            // Điều chỉnh màu icon cho nền sáng
+            icon: const Icon(Icons.language, color: kAppBarColor),
           ),
         ],
       ),
       extendBodyBehindAppBar: true,
-      body: Container(
-        decoration: const BoxDecoration(
-          gradient: LinearGradient(
-            colors: [Color(0xFF6A11CB), Color(0xFF2575FC)],
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-          ),
-        ),
-        child: Center(
-          child: SingleChildScrollView(
-            padding: const EdgeInsets.all(20),
-            child: Card(
-              elevation: 12,
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(20),
-              ),
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    const SizedBox(height: 20),
-                    CircleAvatar(
-                      radius: 50,
-                      backgroundColor:
-                      theme.colorScheme.primary.withOpacity(0.15),
-                      child: Icon(
-                        Icons.lock_outline,
-                        size: 60,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 20),
-                    Text(
-                      tr.translate('welcome'),
-                      style: theme.textTheme.headlineSmall?.copyWith(
-                        fontWeight: FontWeight.bold,
-                        color: theme.colorScheme.primary,
-                      ),
-                    ),
-                    const SizedBox(height: 30),
 
-                    // Email
-                    TextField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.email_outlined),
-                        labelText: tr.translate('email'),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        border: OutlineInputBorder(
+      body: Center(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.all(24),
+          child: Card(
+            // Card màu trắng, bo góc lớn
+            color: kCardColor,
+            elevation: 8,
+            shape: RoundedRectangleBorder(
+              borderRadius: BorderRadius.circular(20),
+              // Thêm viền nhẹ đồng bộ
+              side: BorderSide(color: kPrimaryColor.withOpacity(0.2), width: 1),
+            ),
+            child: Padding(
+              padding: const EdgeInsets.all(30),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  const SizedBox(height: 10),
+                  // Icon Lớn (Sử dụng màu Mint)
+                  CircleAvatar(
+                    radius: 50,
+                    backgroundColor: kPrimaryColor.withOpacity(0.15),
+                    child: const Icon(
+                      Icons.history_edu_outlined, // Đổi icon cho liên quan hơn
+                      size: 55,
+                      color: kPrimaryColor,
+                    ),
+                  ),
+                  const SizedBox(height: 25),
+                  Text(
+                    tr.translate('welcome'),
+                    style: TextStyle(
+                      fontWeight: FontWeight.w900,
+                      fontSize: 24,
+                      color: kTitleTextColor,
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Email Field
+                  TextField(
+                    controller: _emailController,
+                    keyboardType: TextInputType.emailAddress,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.email_outlined, color: kPrimaryColor),
+                      labelText: tr.translate('email'),
+                      labelStyle: const TextStyle(color: kSubtextColor),
+                      filled: true,
+                      fillColor: kPrimaryColor.withOpacity(0.05), // Nền field Pastel
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: kPrimaryColor.withOpacity(0.5)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: kPrimaryColor, width: 2),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+
+                  // Password Field
+                  TextField(
+                    controller: _passwordController,
+                    obscureText: _obscurePwd,
+                    decoration: InputDecoration(
+                      prefixIcon: const Icon(Icons.lock_outline, color: kPrimaryColor),
+                      labelText: tr.translate('password'),
+                      labelStyle: const TextStyle(color: kSubtextColor),
+                      filled: true,
+                      fillColor: kPrimaryColor.withOpacity(0.05), // Nền field Pastel
+                      border: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: BorderSide(color: kPrimaryColor.withOpacity(0.5)),
+                      ),
+                      focusedBorder: OutlineInputBorder(
+                        borderRadius: BorderRadius.circular(12),
+                        borderSide: const BorderSide(color: kPrimaryColor, width: 2),
+                      ),
+                      suffixIcon: IconButton(
+                        icon: Icon(
+                          _obscurePwd ? Icons.visibility_off : Icons.visibility,
+                          color: kPrimaryColor,
+                        ),
+                        onPressed: () =>
+                            setState(() => _obscurePwd = !_obscurePwd),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 30),
+
+                  // Login button (Màu Coral)
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton(
+                      onPressed: _isLoading ? null : _login,
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kAccentColor, // Hồng Đào
+                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
                           borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
                         ),
+                        elevation: 6,
                       ),
-                    ),
-                    const SizedBox(height: 16),
-
-                    // Password
-                    TextField(
-                      controller: _passwordController,
-                      obscureText: _obscurePwd,
-                      decoration: InputDecoration(
-                        prefixIcon: const Icon(Icons.lock_outline),
-                        labelText: tr.translate('password'),
-                        filled: true,
-                        fillColor: Colors.grey.shade100,
-                        border: OutlineInputBorder(
-                          borderRadius: BorderRadius.circular(12),
-                          borderSide: BorderSide.none,
+                      child: _isLoading
+                          ? const SizedBox(
+                        width: 24,
+                        height: 24,
+                        child: CircularProgressIndicator(
+                          color: Colors.white,
+                          strokeWidth: 2.5,
                         ),
-                        suffixIcon: IconButton(
-                          icon: Icon(
-                            _obscurePwd
-                                ? Icons.visibility_off
-                                : Icons.visibility,
-                          ),
-                          onPressed: () =>
-                              setState(() => _obscurePwd = !_obscurePwd),
-                        ),
-                      ),
-                    ),
-                    const SizedBox(height: 25),
-
-                    // Login button
-                    SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton(
-                        onPressed: _isLoading ? null : _login,
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: theme.colorScheme.primary,
-                          padding: const EdgeInsets.symmetric(vertical: 14),
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          elevation: 6,
-                        ),
-                        child: _isLoading
-                            ? const SizedBox(
-                          width: 22,
-                          height: 22,
-                          child: CircularProgressIndicator(
+                      )
+                          : Text(
+                        tr.translate('login_button'),
+                        style: const TextStyle(
+                            fontSize: 18,
                             color: Colors.white,
-                            strokeWidth: 2,
-                          ),
-                        )
-                            : Text(
-                          tr.translate('login_button'),
-                          style: const TextStyle(
-                              fontSize: 16, color: Colors.white),
-                        ),
+                            fontWeight: FontWeight.bold),
                       ),
                     ),
-                    const SizedBox(height: 16),
+                  ),
+                  const SizedBox(height: 20),
 
-                    // Forgot password
-                    TextButton(
-                      onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                              content:
-                              Text(tr.translate('snack_forgot_dev'))),
-                        );
-                      },
-                      child: Text(
-                        tr.translate('forgot_password'),
-                        style: const TextStyle(color: Colors.grey),
-                      ),
+                  // Forgot password
+                  TextButton(
+                    onPressed: () {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                            content:
+                            Text(tr.translate('snack_forgot_dev'))),
+                      );
+                    },
+                    child: Text(
+                      tr.translate('forgot_password'),
+                      style: TextStyle(color: kSubtextColor, fontWeight: FontWeight.w600),
                     ),
+                  ),
 
-                    // Register
-                    TextButton(
-                      onPressed: () {
-                        Navigator.pushNamed(context, '/register');
-                      },
-                      child: Text(
-                        tr.translate('no_account'),
-                        style:
-                        const TextStyle(color: Colors.blueAccent),
-                      ),
+                  // Register
+                  TextButton(
+                    onPressed: () {
+                      Navigator.pushNamed(context, '/register');
+                    },
+                    child: Text(
+                      tr.translate('no_account'),
+                      style:
+                      const TextStyle(color: kPrimaryColor, fontWeight: FontWeight.bold),
                     ),
-                  ],
-                ),
+                  ),
+                ],
               ),
             ),
           ),

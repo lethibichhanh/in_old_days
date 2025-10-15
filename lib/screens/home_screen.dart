@@ -1,3 +1,5 @@
+// File: home_screen.dart
+import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
 import 'package:flutter/services.dart';
@@ -9,6 +11,19 @@ import 'event_map_screen.dart';
 import 'favorite_screen.dart';
 import 'figures_list_screen.dart';
 import 'profile_screen.dart';
+import '../l10n/app_localizations.dart';
+import '../main.dart';
+
+// --- Khai báo màu sắc Pastel Tươi sáng & Chill hơn ---
+const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
+const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
+const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt - Cho điểm nhấn/nút nổi
+const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà rất nhẹ (Chill)
+const Color kCardColor = Colors.white;
+const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
+const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
+
+enum AppLanguage { vi, en, zh }
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,21 +33,48 @@ class HomeScreen extends StatefulWidget {
 }
 
 class _HomeScreenState extends State<HomeScreen> {
+  // ✅ Đảm bảo _year luôn khởi tạo là năm hiện tại
   int _year = DateTime.now().year;
   int? _month;
+  int? _day; // 🆕 State cho ngày cụ thể
   bool _loading = true;
   List<EventModel> _events = [];
-  String _filterType = "Tất cả";
+  String _filterType = "Tất cả"; // Giá trị mặc định ban đầu
 
-  UserModel? _user; // ✅ Nhận từ LoginScreen
-  int? get _currentUserId => _user?.id; // Thuận tiện lấy ID người dùng
-  bool _didLoadUser = false; // 💡 Cờ để chỉ tải user một lần
+  UserModel? _user;
+  int? get _currentUserId => _user?.id;
+  bool _didLoadUser = false;
+
+  Map<String, List<EventModel>> _groupedEvents = {};
+
+  // --- Hàm hỗ trợ Dịch thuật ---
+  String _getText(String key) {
+    return AppLocalizations.of(context)?.translate(key) ?? key;
+  }
+
+  // 🔹 Chuyển ngôn ngữ (Giữ nguyên)
+  void _changeLanguage(AppLanguage newLanguage) {
+    String code = 'en';
+
+    switch (newLanguage) {
+      case AppLanguage.vi:
+        code = 'vi';
+        break;
+      case AppLanguage.en:
+        code = 'en';
+        break;
+      case AppLanguage.zh:
+        code = 'zh';
+        break;
+    }
+
+    InOldDaysApp.setLocale(context, Locale(code));
+  }
 
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
 
-    // 🛠️ CẬP NHẬT: Xử lý arguments được truyền từ LoginScreen VÀ CHỈ GÁN 1 LẦN
     if (!_didLoadUser) {
       final args = ModalRoute.of(context)?.settings.arguments as Map<String, dynamic>?;
       if (args != null && args['user'] != null) {
@@ -46,9 +88,21 @@ class _HomeScreenState extends State<HomeScreen> {
         if (tempUser != null) {
           setState(() {
             _user = tempUser;
-            _didLoadUser = true; // Đánh dấu đã tải
+            _didLoadUser = true;
           });
         }
+      }
+    }
+
+    // Cập nhật _filterType từ bản dịch khi ngôn ngữ thay đổi
+    final tr = AppLocalizations.of(context);
+    if (tr != null) {
+      if (_filterType == "Tất cả" || _filterType == "All" || _filterType == "所有") {
+        _filterType = tr.translate('filter_all');
+      } else if (_filterType == "Quá khứ" || _filterType == "Past" || _filterType == "过去") {
+        _filterType = tr.translate('filter_past');
+      } else if (_filterType == "Tương lai" || _filterType == "Future" || _filterType == "未来") {
+        _filterType = tr.translate('filter_future');
       }
     }
   }
@@ -59,26 +113,96 @@ class _HomeScreenState extends State<HomeScreen> {
     _loadEvents();
   }
 
-  /// 📦 Load sự kiện từ DB
+  // --- Hàm nhóm sự kiện (Đã xác nhận dùng dd/MM/yyyy) ---
+  void _groupEvents(List<EventModel> events) {
+    _groupedEvents.clear();
+
+    final unknownDateKey = _getText('unknown_date');
+
+    for (var event in events) {
+      String key;
+      if (event.date != null) {
+        // ✅ Đảm bảo định dạng DD/MM/YYYY
+        key = DateFormat('dd/MM/yyyy').format(event.date!);
+      } else {
+        key = unknownDateKey;
+      }
+
+      if (!_groupedEvents.containsKey(key)) {
+        _groupedEvents[key] = [];
+      }
+      _groupedEvents[key]!.add(event);
+    }
+    _groupedEvents = Map.fromEntries(
+      _groupedEvents.entries.toList()..sort((e1, e2) {
+        if (e1.key == unknownDateKey) return 1;
+        if (e2.key == unknownDateKey) return -1;
+        return e2.key.compareTo(e1.key);
+      }),
+    );
+  }
+
+  /// 📦 Load sự kiện từ DB (CẬP NHẬT: Kết hợp sự kiện Ngày cụ thể và Ngày/Tháng lặp lại)
   Future<void> _loadEvents() async {
     setState(() => _loading = true);
 
-    List<Map<String, dynamic>> rawData;
-    if (_month != null) {
-      rawData = await DBHelper.eventsOfMonth(_year, _month!);
+    List<Map<String, dynamic>> rawData = [];
+    final currentYear = _year;
+
+    // Lọc theo Ngày/Tháng/Năm
+    if (_day != null && _month != null) {
+      // 1. Lọc theo ngày cụ thể (YYYY-MM-DD): Sự kiện lịch sử diễn ra đúng ngày đó
+      DateTime selectedDate = DateTime(currentYear, _month!, _day!);
+      final specificDayEvents = await DBHelper.eventsOfDay(selectedDate);
+      rawData.addAll(specificDayEvents);
+
+      // 2. Lọc theo ngày & tháng (MM-DD): Sự kiện kỷ niệm lặp lại
+      final recurringEvents = await DBHelper.eventsByDayAndMonth(_month!, _day!);
+
+      // Lọc các sự kiện kỷ niệm trùng lặp với sự kiện lịch sử (nếu có)
+      final specificDayIds = specificDayEvents.map((e) => e['event_id']).toSet();
+      final filteredRecurringEvents = recurringEvents.where((e) => !specificDayIds.contains(e['event_id']));
+
+      rawData.addAll(filteredRecurringEvents.toList());
+
+    } else if (_month != null) {
+      // Lọc theo tháng
+      rawData = await DBHelper.eventsOfMonth(currentYear, _month!);
     } else {
-      rawData = await DBHelper.eventsOfYear(_year);
+      // Lọc theo năm
+      rawData = await DBHelper.eventsOfYear(currentYear);
     }
 
-    List<EventModel> allEvents = rawData.map((e) => EventModel.fromMap(e)).toList();
+    // Loại bỏ hoàn toàn các sự kiện trùng lặp (phòng trường hợp)
+    final uniqueEventsMap = <int, Map<String, dynamic>>{};
+    for (var row in rawData) {
+      if (row['event_id'] is int) {
+        uniqueEventsMap[row['event_id'] as int] = row;
+      }
+    }
+    List<EventModel> allEvents = uniqueEventsMap.values.map((e) => EventModel.fromMap(e)).toList();
+
     final now = DateTime.now();
 
-    // Lọc theo loại
-    if (_filterType == "Tương lai") {
+    // Lấy chuỗi dịch cho các bộ lọc
+    final filterFuture = _getText('filter_future');
+    final filterPast = _getText('filter_past');
+
+    if (_filterType == filterFuture) {
       allEvents = allEvents.where((e) => e.date != null && e.date!.isAfter(now)).toList();
-    } else if (_filterType == "Đã qua") {
+    } else if (_filterType == filterPast) {
       allEvents = allEvents.where((e) => e.date != null && e.date!.isBefore(now)).toList();
     }
+
+    // Sắp xếp lại: ưu tiên các sự kiện gần nhất (DESC)
+    allEvents.sort((a, b) {
+      if (a.date == null && b.date == null) return 0;
+      if (a.date == null) return 1;
+      if (b.date == null) return -1;
+      return b.date!.compareTo(a.date!);
+    });
+
+    _groupEvents(allEvents);
 
     setState(() {
       _events = allEvents;
@@ -86,19 +210,29 @@ class _HomeScreenState extends State<HomeScreen> {
     });
   }
 
-  /// 🎚️ Bộ lọc sự kiện
+  /// 🎚️ Bộ lọc sự kiện (Giữ nguyên)
   void _openFilterDialog() async {
+    final tr = AppLocalizations.of(context)!;
+
+    final List<String> filterOptions = [
+      tr.translate('filter_all'),
+      tr.translate('filter_past'),
+      tr.translate('filter_future')
+    ];
+
     final picked = await showDialog<String>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text("🔍 Lọc sự kiện"),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(tr.translate('filter_title'), style: const TextStyle(color: kTitleTextColor, fontWeight: FontWeight.bold)),
         content: Column(
           mainAxisSize: MainAxisSize.min,
-          children: ["Tất cả", "Đã qua", "Tương lai"]
+          children: filterOptions
               .map((f) => RadioListTile<String>(
-            title: Text(f),
+            title: Text(f, style: const TextStyle(color: kTitleTextColor)),
             value: f,
             groupValue: _filterType,
+            activeColor: kPrimaryColor,
             onChanged: (val) => Navigator.pop(ctx, val),
           ))
               .toList(),
@@ -111,55 +245,30 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 📆 Chọn năm
-  void _openYearPicker() async {
-    final picked = await showDialog<int>(
-      context: context,
-      builder: (ctx) {
-        return AlertDialog(
-          title: const Text('📆 Chọn năm'),
-          content: SizedBox(
-            width: double.maxFinite,
-            height: 300,
-            child: YearPicker(
-              firstDate: DateTime(1000),
-              lastDate: DateTime(DateTime.now().year + 50),
-              initialDate: DateTime(_year),
-              selectedDate: DateTime(_year),
-              onChanged: (d) => Navigator.of(ctx).pop(d.year),
-            ),
-          ),
-        );
-      },
-    );
 
-    if (picked != null && picked != _year) {
-      setState(() {
-        _year = picked;
-        _month = null;
-      });
-      await _loadEvents();
-    }
-  }
-
-  /// 🗓️ Chọn tháng
+  /// 🗓️ Chọn tháng (ĐÃ CẬP NHẬT: Reset _day)
   void _openMonthPicker() async {
+    final tr = AppLocalizations.of(context)!;
+
     final picked = await showDialog<int?>(
       context: context,
       builder: (ctx) => AlertDialog(
-        title: const Text('🗓️ Chọn tháng'),
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)),
+        title: Text(tr.translate('select_month'), style: const TextStyle(color: kTitleTextColor, fontWeight: FontWeight.bold)),
         content: ListView.builder(
           shrinkWrap: true,
           itemCount: 13,
           itemBuilder: (context, i) {
             if (i == 0) {
               return ListTile(
-                title: const Text("📅 Cả năm"),
+                title: Text(tr.translate('full_year'), style: const TextStyle(fontWeight: FontWeight.bold, color: kTitleTextColor)),
                 onTap: () => Navigator.pop(ctx, null),
               );
             }
             return ListTile(
-              title: Text("Tháng $i"),
+              title: Text("${tr.translate('month')} $i", style: TextStyle(color: i == _month ? kPrimaryColor : kTitleTextColor)),
+              selected: i == _month,
+              selectedColor: kPrimaryColor,
               onTap: () => Navigator.pop(ctx, i),
             );
           },
@@ -168,12 +277,65 @@ class _HomeScreenState extends State<HomeScreen> {
     );
 
     if (picked != _month) {
-      setState(() => _month = picked);
+      setState(() {
+        _month = picked;
+        _day = null; // ✅ Reset ngày
+      });
       await _loadEvents();
     }
   }
 
-  /// 🖼️ Kiểm tra asset tồn tại
+  /// 🗓️ 🆕 Chọn ngày cụ thể (Giữ nguyên)
+  void _openDatePicker() async {
+    final tr = AppLocalizations.of(context)!;
+
+    // Ngày khởi tạo: Ưu tiên ngày đang chọn, nếu không có thì lấy ngày hôm nay trong năm đang chọn
+    final initialDate = (_month != null && _day != null)
+        ? DateTime(_year, _month!, _day!)
+        : DateTime(_year, DateTime.now().month, DateTime.now().day);
+
+    final pickedDate = await showDatePicker(
+      context: context,
+      initialDate: initialDate,
+      firstDate: DateTime(1000),
+      lastDate: DateTime(DateTime.now().year + 50),
+      helpText: tr.translate('select_date'),
+      confirmText: tr.translate('confirm'),
+      cancelText: tr.translate('cancel'),
+      builder: (context, child) {
+        return Theme(
+          data: ThemeData.light().copyWith(
+            primaryColor: kPrimaryColor,
+            colorScheme: ColorScheme.light(primary: kPrimaryColor, onPrimary: Colors.white, surface: kCardColor),
+            dialogBackgroundColor: kCardColor,
+          ),
+          child: child!,
+        );
+      },
+    );
+
+    if (pickedDate != null) {
+      // Nếu ngày được chọn, cập nhật cả năm, tháng, và ngày.
+      if (pickedDate.year != _year || pickedDate.month != _month || pickedDate.day != _day) {
+        setState(() {
+          _year = pickedDate.year;
+          _month = pickedDate.month;
+          _day = pickedDate.day;
+        });
+        await _loadEvents();
+      }
+    } else {
+      // Nếu hủy chọn ngày (nhưng trước đó đã có ngày), reset _day để trở về lọc theo tháng/năm
+      if (_day != null) {
+        setState(() {
+          _day = null;
+        });
+        await _loadEvents();
+      }
+    }
+  }
+
+  // --- Các hàm hỗ trợ hình ảnh (Giữ nguyên) ---
   Future<bool> _assetExists(String path) async {
     try {
       await rootBundle.load(path);
@@ -183,22 +345,21 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
 
-  /// 🖼️ Hiển thị ảnh sự kiện
-  Widget _buildThumbnail(String? imageUrl) {
-    if (imageUrl == null || imageUrl.trim().isEmpty) return _fallbackImage();
+  Widget _buildThumbnail(String? imageUrl, {required double height}) {
+    if (imageUrl == null || imageUrl.trim().isEmpty) return _fallbackImage(height: height);
 
     String path = imageUrl.replaceAll("\\", "/");
     bool isNetwork = path.startsWith('http');
 
     if (isNetwork) {
       return ClipRRect(
-        borderRadius: BorderRadius.circular(16),
+        borderRadius: BorderRadius.circular(10),
         child: Image.network(
           path,
-          width: 70,
-          height: 70,
+          height: height,
+          width: double.infinity,
           fit: BoxFit.cover,
-          errorBuilder: (_, __, ___) => _fallbackImage(),
+          errorBuilder: (_, __, ___) => _fallbackImage(height: height),
         ),
       );
     } else {
@@ -207,239 +368,557 @@ class _HomeScreenState extends State<HomeScreen> {
         future: _assetExists(assetPath),
         builder: (context, snapshot) {
           if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SizedBox(
-              width: 70,
-              height: 70,
-              child: Center(child: CircularProgressIndicator(strokeWidth: 2)),
+            return SizedBox(
+              height: height,
+              width: double.infinity,
+              child: const Center(child: CircularProgressIndicator(strokeWidth: 2, color: kAccentColor)),
             );
           }
           if (snapshot.data == true) {
             return ClipRRect(
-              borderRadius: BorderRadius.circular(16),
-              child: Image.asset(assetPath, width: 70, height: 70, fit: BoxFit.cover),
+              borderRadius: BorderRadius.circular(10),
+              child: Image.asset(assetPath, height: height, width: double.infinity, fit: BoxFit.cover),
             );
           } else {
-            return _fallbackImage();
+            return _fallbackImage(height: height);
           }
         },
       );
     }
   }
 
-  Widget _fallbackImage() {
+  Widget _fallbackImage({required double height}) {
     return Container(
-      width: 70,
-      height: 70,
+      height: height,
+      width: double.infinity,
       decoration: BoxDecoration(
-        color: Colors.grey.shade200,
-        borderRadius: BorderRadius.circular(16),
+        color: kPrimaryColor.withOpacity(0.1),
+        borderRadius: BorderRadius.circular(10),
       ),
-      child: const Icon(Icons.image_not_supported, color: Colors.grey),
+      child: Icon(Icons.history_edu_outlined, color: kPrimaryColor.withOpacity(0.5), size: height * 0.4),
     );
   }
 
-  @override
-  Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.brown.shade50,
+  // --- Widget Thẻ Sự kiện Tiêu chuẩn (Đã xác nhận dùng dd/MM/yyyy) ---
+  Widget _buildStandardEventCard(EventModel e) {
+    // ✅ Đảm bảo định dạng DD/MM/YYYY
+    final dateStr = e.date != null
+        ? DateFormat('dd/MM/yyyy').format(e.date!)
+        : _getText('unknown_date');
 
-      // 🧭 Drawer
-      drawer: Drawer(
-        child: Column(
-          children: [
-            UserAccountsDrawerHeader(
-              decoration: const BoxDecoration(
-                gradient: LinearGradient(
-                  colors: [Color(0xff8d5524), Color(0xffc68642)],
-                  begin: Alignment.topLeft,
-                  end: Alignment.bottomRight,
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 6.0, horizontal: 16.0),
+      child: InkWell(
+        onTap: () {
+          if (e.eventId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => EventDetailScreen(eventId: e.eventId!, userId: _currentUserId)),
+            );
+          }
+        },
+        borderRadius: BorderRadius.circular(16),
+        child: Container(
+          decoration: BoxDecoration(
+            color: kCardColor,
+            borderRadius: BorderRadius.circular(16),
+            boxShadow: [
+              BoxShadow(
+                color: kSubtextColor.withOpacity(0.1),
+                spreadRadius: 1,
+                blurRadius: 5,
+                offset: const Offset(0, 3), // shadow nhẹ
+              ),
+            ],
+          ),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.center,
+            children: [
+              // Ảnh nhỏ bên trái
+              SizedBox(
+                width: 100,
+                height: 100,
+                child: Padding(
+                  padding: const EdgeInsets.all(10.0),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12), // Góc bo tròn hơn
+                    child: _buildThumbnail(e.imageUrl, height: 80),
+                  ),
                 ),
               ),
-              currentAccountPicture: CircleAvatar(
-                // 💡 Đảm bảo hiển thị avatar mặc định nếu không có avatar từ DB
-                backgroundImage: (_user?.avatar?.isNotEmpty ?? false)
-                    ? NetworkImage(_user!.avatar!)
-                    : const AssetImage('assets/default_avatar.png') as ImageProvider,
-              ),
-              accountName: Text(_user?.fullname ?? _user?.username ?? "Người dùng"),
-              accountEmail: Text(_user?.email ?? ""),
-            ),
-            ListTile(
-              leading: const Icon(Icons.home),
-              title: const Text('Trang chủ'),
-              onTap: () => Navigator.pop(context),
-            ),
-            ListTile(
-              leading: const Icon(Icons.person),
-              title: const Text('Nhân vật lịch sử'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(context, MaterialPageRoute(builder: (_) => const FiguresListScreen()));
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.favorite),
-              title: const Text('Sự kiện yêu thích'),
-              onTap: () {
-                Navigator.pop(context);
-                // ✅ SỬA LỖI: Kiểm tra _currentUserId và điều hướng
-                if (_currentUserId != null) {
-                  Navigator.push(context, MaterialPageRoute(builder: (_) => FavoriteScreen(userId: _currentUserId!)));
-                } else {
-                  // Xử lý trường hợp user null (không mong muốn nếu đã đăng nhập)
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text("Vui lòng đăng nhập lại để xem yêu thích.")),
-                  );
-                }
-              },
-            ),
-            const Divider(),
-            ListTile(
-              leading: const Icon(Icons.account_circle_outlined),
-              title: const Text('Thông tin cá nhân'),
-              onTap: () {
-                Navigator.pop(context);
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    // 💡 TRUYỀN THÔNG TIN USER DƯỚI DẠNG ĐỐI SỐ CHO ProfileScreen
-                    builder: (_) => const ProfileScreen(),
-                    settings: RouteSettings(arguments: {'user': _user}),
+
+              // Thông tin bên phải
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(0, 10, 12, 10),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Text(
+                        e.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.w700,
+                          color: kTitleTextColor,
+                        ),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        dateStr,
+                        style: TextStyle(fontSize: 13, color: kPrimaryColor, fontWeight: FontWeight.bold),
+                      ),
+                      const SizedBox(height: 4),
+                      Text(
+                        e.locationName ?? _getText('unknown_location'),
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(fontSize: 12, color: kSubtextColor),
+                      ),
+                    ],
                   ),
-                );
-              },
-            ),
-            ListTile(
-              leading: const Icon(Icons.logout, color: Colors.red),
-              title: const Text('Đăng xuất', style: TextStyle(color: Colors.red)),
-              onTap: () {
-                // Xóa UserModel khi đăng xuất
-                _user = null;
-                // Gọi setState để cập nhật UI ngay lập tức
-                setState(() {});
-                Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
-              },
-            ),
-          ],
+                ),
+              ),
+            ],
+          ),
         ),
       ),
+    );
+  }
 
-      appBar: AppBar(
-        elevation: 2,
-        title: const Text("🇻🇳 In Old Days", style: TextStyle(fontWeight: FontWeight.bold)),
-        centerTitle: true,
-        flexibleSpace: Container(
-          decoration: const BoxDecoration(
-            gradient: LinearGradient(
-              colors: [Color(0xff8d5524), Color(0xffc68642)],
-              begin: Alignment.topLeft,
-              end: Alignment.bottomRight,
+  // --- Widget Thẻ Sự kiện Nổi bật (Đã xác nhận dùng dd/MM/yyyy) ---
+  Widget _buildFeaturedCard(EventModel e) {
+    // ✅ Đảm bảo định dạng DD/MM/YYYY
+    final dateStr = e.date != null ? DateFormat('dd/MM/yyyy').format(e.date!) : _getText('unknown_date');
+    final isFuture = e.date != null && e.date!.isAfter(DateTime.now());
+    final statusText = isFuture ? _getText('filter_future') : _getText('filter_past');
+
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 12.0),
+      child: InkWell(
+        onTap: () {
+          if (e.eventId != null) {
+            Navigator.push(
+              context,
+              MaterialPageRoute(builder: (_) => EventDetailScreen(eventId: e.eventId!, userId: _currentUserId)),
+            );
+          }
+        },
+        borderRadius: BorderRadius.circular(20), // Bo tròn cực lớn
+        child: Container(
+          decoration: BoxDecoration(
+            color: kCardColor,
+            borderRadius: BorderRadius.circular(20),
+            boxShadow: [
+              BoxShadow(
+                color: kAppBarColor.withOpacity(0.15), // Shadow đậm hơn
+                spreadRadius: 0,
+                blurRadius: 10,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Tiêu đề nổi bật trong ảnh
+              Stack(
+                children: [
+                  ClipRRect(
+                    borderRadius: const BorderRadius.vertical(top: Radius.circular(20)),
+                    child: _buildThumbnail(e.imageUrl, height: 180),
+                  ),
+                  Positioned(
+                    top: 10,
+                    right: 10,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                      decoration: BoxDecoration(
+                        color: kAccentColor.withOpacity(0.9), // Accent color nổi bật
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Text(
+                        statusText,
+                        style: const TextStyle(
+                          fontSize: 12,
+                          fontWeight: FontWeight.bold,
+                          color: kTitleTextColor,
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
+                      decoration: BoxDecoration(
+                        color: kAppBarColor.withOpacity(0.7), // Overlay Xanh Mint đậm
+                        borderRadius: const BorderRadius.vertical(bottom: Radius.circular(20)),
+                      ),
+                      child: Text(
+                        e.title,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.w900,
+                          color: Colors.white,
+                        ),
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+
+              // Nội dung mô tả
+              Padding(
+                padding: const EdgeInsets.all(16),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      dateStr,
+                      style: const TextStyle(fontSize: 14, color: kPrimaryColor, fontWeight: FontWeight.bold),
+                    ),
+                    const SizedBox(height: 10),
+                    Text(
+                      e.description ?? _getText('no_description'),
+                      maxLines: 3,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(fontSize: 14, color: kSubtextColor),
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+
+  // --- Widget để nhóm các Sự kiện theo Ngày (Giữ nguyên logic dịch) ---
+  List<Widget> _buildGroupedEventList() {
+    List<Widget> widgets = [];
+
+    final unknownDateKey = _getText('unknown_date');
+    final otherEvents = _getText('other_events');
+    final featuredEvents = _getText('featured_events');
+    final datePrefix = _getText('date_prefix');
+    final noEventsFound = _getText('no_events_found');
+
+    // Thẻ nổi bật đầu tiên
+    if (_events.isNotEmpty) {
+      widgets.add(Padding(
+        padding: const EdgeInsets.only(top: 10, left: 20, right: 16),
+        child: Text(featuredEvents, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kTitleTextColor)),
+      ));
+      widgets.add(_buildFeaturedCard(_events.first));
+
+      // Bắt đầu nhóm từ sự kiện thứ 2
+      final eventsToGroup = _events.sublist(1);
+
+      Map<String, List<EventModel>> remainingGroupedEvents = {};
+      for (var event in eventsToGroup) {
+        // ✅ Đảm bảo định dạng DD/MM/YYYY
+        String key = event.date != null ? DateFormat('dd/MM/yyyy').format(event.date!) : unknownDateKey;
+        if (!remainingGroupedEvents.containsKey(key)) {
+          remainingGroupedEvents[key] = [];
+        }
+        remainingGroupedEvents[key]!.add(event);
+      }
+
+      remainingGroupedEvents = Map.fromEntries(
+        remainingGroupedEvents.entries.toList()..sort((e1, e2) {
+          if (e1.key == unknownDateKey) return 1;
+          if (e2.key == unknownDateKey) return -1;
+          return e2.key.compareTo(e1.key);
+        }),
+      );
+
+
+      remainingGroupedEvents.forEach((dateKey, events) {
+        widgets.add(
+          Padding(
+            padding: const EdgeInsets.only(top: 25.0, bottom: 8.0, left: 20.0, right: 16.0),
+            child: Text(
+              dateKey == unknownDateKey ? otherEvents : "$datePrefix $dateKey", // Dịch
+              style: const TextStyle(
+                fontSize: 18,
+                fontWeight: FontWeight.w900,
+                color: kAppBarColor,
+              ),
+            ),
+          ),
+        );
+        for (var e in events) {
+          widgets.add(_buildStandardEventCard(e));
+        }
+      });
+    }
+
+    if (widgets.isEmpty && !_loading) {
+      widgets.add(
+        Padding(
+          padding: const EdgeInsets.all(40.0),
+          child: Center(
+            child: Text(
+              noEventsFound, // Dịch
+              textAlign: TextAlign.center,
+              style: const TextStyle(color: kSubtextColor, fontSize: 16),
             ),
           ),
         ),
+      );
+    }
+
+    return widgets;
+  }
+
+  // --- Hàm hỗ trợ hiển thị tiêu đề bộ lọc ngày tháng (Đã xác nhận dùng dd/MM/yyyy) ---
+  String _buildDateFilterText(AppLocalizations tr) {
+    if (_day != null) {
+      // ✅ Lọc theo ngày cụ thể: Format ra DD/MM/YYYY
+      return DateFormat('dd/MM/yyyy').format(DateTime(_year, _month!, _day!));
+    } else if (_month != null) {
+      // Lọc theo tháng
+      return "${tr.translate('month_prefix')} $_month ${tr.translate('year_prefix')} $_year";
+    } else {
+      // Lọc theo năm
+      return "${tr.translate('full_year')} $_year";
+    }
+  }
+
+
+  @override
+  Widget build(BuildContext context) {
+    final tr = AppLocalizations.of(context)!;
+    final title = tr.translate('app_title');
+
+    return Scaffold(
+      backgroundColor: kBackgroundColor,
+
+      // 🧭 Drawer
+      drawer: _buildDrawer(),
+
+      // AppBar
+      appBar: AppBar(
+        elevation: 0,
+        backgroundColor: kAppBarColor,
+        title: Text(title, style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
+        iconTheme: const IconThemeData(color: Colors.white),
         actions: [
-          IconButton(icon: const Icon(Icons.filter_alt_outlined), onPressed: _openFilterDialog),
-          IconButton(icon: const Icon(Icons.calendar_today), onPressed: _openYearPicker),
-          IconButton(icon: const Icon(Icons.date_range_outlined), onPressed: _openMonthPicker),
+          // NÚT CHUYỂN ĐỔI NGÔN NGỮ
+          PopupMenuButton<AppLanguage>(
+            onSelected: _changeLanguage,
+            itemBuilder: (context) => const [
+              PopupMenuItem(value: AppLanguage.vi, child: Text('🇻🇳 Tiếng Việt')),
+              PopupMenuItem(value: AppLanguage.en, child: Text('🇺🇸 English')),
+              PopupMenuItem(value: AppLanguage.zh, child: Text('🇨🇳 中文')),
+            ],
+            icon: const Icon(Icons.language, color: Colors.white),
+          ),
+          // CÁC NÚT KHÁC
+          IconButton(
+              icon: const Icon(Icons.filter_list),
+              tooltip: tr.translate('filter_tooltip'),
+              onPressed: _openFilterDialog
+          ),
+          // NÚT CHỌN NĂM (Icons.calendar_today) ĐÃ ĐƯỢC XÓA THEO YÊU CẦU
         ],
       ),
 
-      body: _loading
-          ? const Center(child: CircularProgressIndicator())
-          : _events.isEmpty
-          ? const Center(child: Text("😢 Không có sự kiện nào phù hợp."))
-          : RefreshIndicator(
-        onRefresh: _loadEvents,
-        child: ListView.builder(
-          padding: const EdgeInsets.all(12),
-          itemCount: _events.length,
-          itemBuilder: (ctx, i) {
-            final e = _events[i];
-            final dateStr = e.date != null
-                ? DateFormat('dd/MM/yyyy').format(e.date!)
-                : "Không rõ ngày";
-            final isFuture = e.date != null && e.date!.isAfter(DateTime.now());
-            final chipColor =
-            isFuture ? Colors.green.shade100 : Colors.orange.shade100;
-            final chipText = isFuture ? "Tương lai" : "Đã qua";
-
-            return AnimatedContainer(
-              duration: const Duration(milliseconds: 250),
-              margin: const EdgeInsets.symmetric(vertical: 8),
-              child: InkWell(
-                onTap: () {
-                  if (e.eventId != null) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (_) => EventDetailScreen(
-                          eventId: e.eventId!,
-                          // ✅ TRUYỀN userId cho EventDetailScreen
-                          userId: _currentUserId,
-                        ),
-                      ),
-                    );
-                  }
-                },
-                borderRadius: BorderRadius.circular(16),
-                child: Card(
-                  elevation: 3,
-                  shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(16)),
-                  child: Padding(
-                    padding: const EdgeInsets.all(10),
-                    child: Row(
-                      children: [
-                        _buildThumbnail(e.imageUrl),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                e.title,
-                                style: const TextStyle(
-                                  fontSize: 17,
-                                  fontWeight: FontWeight.bold,
-                                  color: Colors.brown,
-                                ),
-                              ),
-                              const SizedBox(height: 4),
-                              Text(
-                                "$dateStr • ${e.locationName ?? 'Không rõ địa điểm'}",
-                                style: const TextStyle(
-                                    fontSize: 14, color: Colors.grey),
-                              ),
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: Alignment.bottomRight,
-                                child: Chip(
-                                  label: Text(chipText),
-                                  backgroundColor: chipColor,
-                                  visualDensity: VisualDensity.compact,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                      ],
-                    ),
+      body: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          // --- Thanh Chọn Ngày/Tháng/Năm (Sticky Header) ---
+          Container(
+            color: kAppBarColor,
+            padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.start,
+              children: [
+                // 🆕 NÚT CHỌN NGÀY CỤ THỂ (HIỂN THỊ NGÀY ĐANG LỌC)
+                TextButton.icon(
+                  onPressed: _openDatePicker,
+                  icon: const Icon(Icons.today, color: Colors.white, size: 20),
+                  label: Text(
+                    _buildDateFilterText(tr), // Hiển thị ngày/tháng/năm đang lọc
+                    style: const TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
+                  ),
+                  style: TextButton.styleFrom(
+                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                    backgroundColor: kPrimaryColor, // Màu nền cho nút
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)), // Góc bo tròn
+                    elevation: 4, // Thêm shadow nhẹ
                   ),
                 ),
+                const SizedBox(width: 8),
+
+                // NÚT CHỌN THÁNG (Icon nhỏ hơn)
+                Container(
+                  decoration: BoxDecoration(
+                    color: kPrimaryColor.withOpacity(0.8),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                  child: IconButton(
+                    icon: const Icon(Icons.date_range, color: Colors.white, size: 20),
+                    tooltip: tr.translate('select_month'),
+                    onPressed: _openMonthPicker,
+                  ),
+                ),
+
+                // NÚT CHỌN NĂM (Vẫn giữ lại để người dùng có thể lọc theo năm cụ thể)
+                const SizedBox(width: 8),
+
+
+              ],
+            ),
+          ),
+
+          // --- Nội dung chính (Sự kiện) ---
+          Expanded(
+            child: _loading
+                ? const Center(child: CircularProgressIndicator(color: kPrimaryColor))
+                : RefreshIndicator(
+              onRefresh: _loadEvents,
+              color: kPrimaryColor,
+              child: ListView(
+                padding: const EdgeInsets.only(bottom: 80), // Tăng padding để FAB không che
+                children: _buildGroupedEventList(),
               ),
-            );
-          },
-        ),
+            ),
+          ),
+        ],
       ),
 
+      // Nút Bản đồ trở về vị trí FAB
       floatingActionButton: FloatingActionButton.extended(
         onPressed: () => Navigator.push(
           context,
-          MaterialPageRoute(builder: (_) => EventMapScreen(year: _year, month: _month)),
+          // CẬP NHẬT: THÊM tham số day: _day
+          MaterialPageRoute(builder: (_) => EventMapScreen(year: _year, month: _month, day: _day, userId: _currentUserId)),
         ),
-        label: const Text("Xem bản đồ"),
-        icon: const Icon(Icons.map),
-        backgroundColor: Colors.brown.shade400,
+        label: Text(tr.translate('view_map_button'), style: const TextStyle(fontWeight: FontWeight.bold)), // Dịch
+        icon: const Icon(Icons.map_outlined),
+        backgroundColor: kAccentColor, // Hồng Đào/Coral Nhạt
+        foregroundColor: kTitleTextColor, // Màu chữ đen
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(16)), // Bo tròn FAB
+      ),
+    );
+  }
+
+  // Widget hỗ trợ cho Drawer (Cập nhật logic hiển thị Avatar)
+  Widget _buildDrawer() {
+    final tr = AppLocalizations.of(context)!;
+
+    // --- Xử lý hiển thị Avatar trong Drawer ---
+    ImageProvider? avatarImage;
+    if (_user?.avatar?.isNotEmpty ?? false) {
+      final avatarPath = _user!.avatar!;
+      if (avatarPath.startsWith('http')) {
+        avatarImage = NetworkImage(avatarPath);
+      } else if (File(avatarPath).existsSync()) {
+        avatarImage = FileImage(File(avatarPath));
+      }
+    }
+
+    // THÊM: Nếu không có ảnh hợp lệ, dùng icon/placeholder mặc định
+    final Widget avatarWidget = CircleAvatar(
+      backgroundColor: kAccentColor.withOpacity(0.8),
+      radius: 30, // Kích thước cố định cho CircleAvatar
+      child: ClipOval(
+        child: (avatarImage != null)
+            ? Image(
+          image: avatarImage,
+          width: 60,
+          height: 60,
+          fit: BoxFit.cover,
+          // Fallback nếu ảnh không load được
+          errorBuilder: (_, __, ___) => const Icon(Icons.person, size: 40, color: Colors.white),
+        )
+            : const Icon(Icons.person, size: 40, color: Colors.white),
+      ),
+    );
+
+
+    return Drawer(
+      child: Column(
+        children: [
+          UserAccountsDrawerHeader(
+            decoration: const BoxDecoration(
+              color: kAppBarColor,
+            ),
+            currentAccountPicture: avatarWidget, // Sử dụng widget đã xử lý
+            accountName: Text(_user?.fullname ?? _user?.username ?? tr.translate('drawer_guest'), style: const TextStyle(fontWeight: FontWeight.w900, color: Colors.white)),
+            accountEmail: Text(_user?.email ?? "", style: const TextStyle(color: kAccentColor)),
+          ),
+          ListTile(
+            leading: const Icon(Icons.home, color: kPrimaryColor),
+            title: Text(tr.translate('drawer_home'), style: const TextStyle(color: kTitleTextColor, fontWeight: FontWeight.w600)),
+            onTap: () => Navigator.pop(context),
+          ),
+          ListTile(
+            leading: const Icon(Icons.person_pin_circle_outlined, color: kPrimaryColor),
+            title: Text(tr.translate('drawer_figures'), style: const TextStyle(color: kTitleTextColor)),
+            onTap: () {
+              Navigator.pop(context);
+              Navigator.push(context, MaterialPageRoute(builder: (_) => const FiguresListScreen()));
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.favorite_border, color: kPrimaryColor),
+            title: Text(tr.translate('drawer_favorites'), style: const TextStyle(color: kTitleTextColor)),
+            onTap: () {
+              Navigator.pop(context);
+              if (_currentUserId != null) {
+                Navigator.push(context, MaterialPageRoute(builder: (_) => FavoriteScreen(userId: _currentUserId!)));
+              } else {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(tr.translate('snack_login_fav'))),
+                );
+              }
+            },
+          ),
+          const Divider(),
+          ListTile(
+            leading: const Icon(Icons.account_circle_outlined, color: kPrimaryColor),
+            title: Text(tr.translate('drawer_profile'), style: const TextStyle(color: kTitleTextColor)),
+            onTap: () async {
+              Navigator.pop(context);
+              // Dòng này đã đúng: Chờ kết quả trả về từ ProfileScreen
+              final updatedUser = await Navigator.push(
+                context,
+                MaterialPageRoute(
+                  builder: (_) => const ProfileScreen(),
+                  settings: RouteSettings(arguments: {'user': _user}),
+                ),
+              );
+
+              if (updatedUser is UserModel) {
+                if (mounted) {
+                  setState(() {
+                    _user = updatedUser; // Cập nhật state _user, kích hoạt lại _buildDrawer và hiển thị Avatar mới
+                  });
+                }
+              }
+            },
+          ),
+          ListTile(
+            leading: const Icon(Icons.logout, color: Colors.red),
+            title: Text(tr.translate('drawer_logout'), style: const TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
+            onTap: () {
+              _user = null;
+              setState(() {});
+              Navigator.pushNamedAndRemoveUntil(context, '/login', (route) => false);
+            },
+          ),
+        ],
       ),
     );
   }

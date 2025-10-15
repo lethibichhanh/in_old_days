@@ -2,10 +2,11 @@
 
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
+import 'package:flutter/services.dart'; // 🌟 CẦN THÊM DÒNG NÀY ĐỂ DÙNG rootBundle
 import '../db/db_helper.dart';
 import '../models/historical_figure.dart';
 import 'event_detail_screen.dart';
-import '../l10n/app_localizations.dart'; // ✅ THÊM IMPORT NGÔN NGỮ
+import '../l10n/app_localizations.dart';
 
 // --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ) ---
 const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
@@ -17,15 +18,100 @@ const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
 const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
 
 
-class FigureDetailScreen extends StatelessWidget {
+// 🌟 CHUYỂN SANG STATEFULWIDGET
+class FigureDetailScreen extends StatefulWidget {
   final HistoricalFigure figure;
-  // ✅ THÊM userId ĐỂ TRUYỀN XUỐNG EventDetailScreen (Nếu cần, đảm bảo tính nhất quán)
   final int? userId;
 
   const FigureDetailScreen({super.key, required this.figure, this.userId});
 
   @override
+  State<FigureDetailScreen> createState() => _FigureDetailScreenState();
+}
+
+class _FigureDetailScreenState extends State<FigureDetailScreen> {
+
+  // ================== LOGIC XỬ LÝ ẢNH (ASSET & NETWORK) ==================
+
+  // Hàm tiện ích: Kiểm tra xem tệp asset có tồn tại hay không
+  Future<String?> _tryLoadAsset(List<String> candidates) async {
+    for (var path in candidates) {
+      try {
+        await rootBundle.load(path);
+        return path;
+      } catch (_) {}
+    }
+    return null;
+  }
+
+  // Hàm tiện ích: Xây dựng widget ảnh sự kiện, xử lý cả URL Mạng và Asset cục bộ
+  Widget _buildEventImageWidget(String? imageUrl) {
+    if (imageUrl == null || imageUrl.trim().isEmpty) {
+      // Nếu không có URL ảnh, trả về Icon sự kiện mặc định
+      return const Icon(Icons.event, size: 30, color: kPrimaryColor);
+    }
+
+    String path = imageUrl.replaceAll("\\", "/");
+    final bool isNetwork = path.startsWith('http://') || path.startsWith('https://');
+
+    // Kích thước cố định cho ListTile.leading
+    const double size = 50;
+
+    if (isNetwork) {
+      // Tải ảnh MẠNG
+      return Image.network(
+        path,
+        width: size,
+        height: size,
+        fit: BoxFit.cover,
+        errorBuilder: (_, __, ___) =>
+        const Icon(Icons.image_not_supported, size: 30, color: kAccentColor), // Lỗi tải mạng
+      );
+    } else {
+      // Tải ảnh ASSET (Cục bộ)
+      String assetPath = path.replaceAll('-', '_');
+      if (!assetPath.startsWith('assets/')) {
+        assetPath = 'assets/Image/$assetPath';
+      }
+
+      List<String> candidates = [];
+      if (assetPath.endsWith(".png") || assetPath.endsWith(".jpg")) {
+        candidates.add(assetPath);
+      } else {
+        candidates.add("$assetPath.png");
+        candidates.add("$assetPath.jpg");
+      }
+
+      return FutureBuilder<String?>(
+        future: _tryLoadAsset(candidates),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: SizedBox(width: 20, height: 20, child: CircularProgressIndicator(color: kPrimaryColor, strokeWidth: 2)));
+          }
+          if (snapshot.hasData && snapshot.data != null) {
+            return Image.asset(
+              snapshot.data!,
+              width: size,
+              height: size,
+              fit: BoxFit.cover,
+              errorBuilder: (_, __, ___) =>
+              const Icon(Icons.broken_image, size: 30, color: kAccentColor), // Lỗi tải asset
+            );
+          }
+          return const Icon(Icons.image_not_supported, size: 30, color: kAccentColor); // Không tìm thấy asset
+        },
+      );
+    }
+  }
+
+  // ================== HÀM BUILD ==================
+
+  @override
   Widget build(BuildContext context) {
+    // 🌟 TRUY CẬP figure VÀ userId THÔNG QUA widget.
+    final figure = widget.figure;
+    final userId = widget.userId;
+
     // ✅ TRUY CẬP LOCALIZATIONS
     final tr = AppLocalizations.of(context)!;
 
@@ -36,6 +122,22 @@ class FigureDetailScreen extends StatelessWidget {
     final noRelatedEvent = tr.translate('figure_no_related_event');
     final noTitle = tr.translate('no_title');
     final dateformat = tr.locale.languageCode == 'vi' ? 'dd/MM/yyyy' : 'MM/dd/yyyy';
+
+    // 🌟 XỬ LÝ CHUỖI lifeSpan: Tách ngày sinh và ngày mất, thay thế '-' bằng '/'
+    String formattedLifeSpan = '';
+    if (figure.lifeSpan.isNotEmpty) {
+      // Tách chuỗi theo separator " - "
+      final parts = figure.lifeSpan.split(' - ');
+
+      final formattedParts = parts.map((part) {
+        // Thay thế tất cả '-' trong mỗi phần (DD-MM-YYYY) bằng '/'
+        return part.trim().replaceAll('-', '/');
+      }).toList();
+
+      // Nối lại các phần đã định dạng bằng separator " - "
+      formattedLifeSpan = formattedParts.join(' - ');
+    }
+    // Chuỗi formattedLifeSpan sẽ là: "13/03/1884 - 04/04/1978"
 
     return Scaffold(
       backgroundColor: kBackgroundColor,
@@ -99,14 +201,25 @@ class FigureDetailScreen extends StatelessWidget {
             ),
             const SizedBox(height: 8),
 
-            // Ngày sinh – ngày mất (Giữ nguyên)
-            Text(
-              figure.lifeSpan,
-              style: Theme.of(context)
-                  .textTheme
-                  .titleSmall
-                  ?.copyWith(color: kAccentColor, fontWeight: FontWeight.bold), // Màu Coral
-            ),
+            // ✅ HIỂN THỊ: Ngày sinh - Ngày mất (Đã định dạng lại)
+            if (formattedLifeSpan.isNotEmpty)
+              Row(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  const Icon(Icons.calendar_month, size: 20, color: kPrimaryColor), // Icon Lịch/Tuổi thọ
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: Text(
+                      formattedLifeSpan, // HIỂN THỊ CẢ HAI NGÀY ĐÃ FORMAT: 13/03/1884 - 04/04/1978
+                      style: Theme.of(context)
+                          .textTheme
+                          .titleSmall
+                          ?.copyWith(color: kAccentColor, fontWeight: FontWeight.bold), // Màu Coral
+                    ),
+                  ),
+                ],
+              ),
+            // ✅ Kết thúc phần hiển thị cải tiến
             const SizedBox(height: 20),
 
             // Mô tả
@@ -119,7 +232,7 @@ class FigureDetailScreen extends StatelessWidget {
 
             // Sự kiện liên quan
             FutureBuilder<List<Map<String, dynamic>>>(
-              // GỌI HÀM DB LẤY SỰ KIỆN THEO ID NHÂN VẬT
+              // GỌI HÀM DB LẤY SỰ KIỆN THEO ID NHÂN VẬT (Đã được cập nhật để loại bỏ trùng lặp)
               future: DBHelper.getEventsByFigureId(figure.figureId),
               builder: (context, snapshot) {
                 if (snapshot.connectionState == ConnectionState.waiting) {
@@ -135,6 +248,7 @@ class FigureDetailScreen extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Text(
+                      // Tiêu đề sử dụng số lượng sự kiện ĐÃ LỌC DUY NHẤT
                       '$eventRelated (${events.length}):', // ✅ Dịch: '🗓 Sự kiện liên quan'
                       style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: kAppBarColor),
                     ),
@@ -142,13 +256,30 @@ class FigureDetailScreen extends StatelessWidget {
 
                     ...events.map((event) {
                       DateTime? eventDate;
-                      if (event['date'] != null &&
-                          event['date'].toString().isNotEmpty) {
-                        // Thêm logic xử lý ngày không hợp lệ (ví dụ: chỉ có năm)
-                        eventDate = DateTime.tryParse(event['date'].toString().length < 10 ?
-                        '${event['date'].toString().padRight(10, '0').substring(0, 4)}-01-01' :
-                        event['date'].toString());
+                      // 🌟 LOGIC XỬ LÝ NGÀY THÁNG ĐÃ ĐƯỢC CẬP NHẬT Ở PHẢN HỒI TRƯỚC (Giữ nguyên)
+                      final dateStr = event['date']?.toString().trim() ?? '';
+
+                      if (dateStr.isNotEmpty) {
+                        eventDate = DateTime.tryParse(dateStr);
+
+                        if (eventDate == null) {
+                          if (dateStr.length == 4) { // Chỉ có YYYY
+                            eventDate = DateTime.tryParse('$dateStr-01-01');
+                          } else if (dateStr.length >= 6 && dateStr.length <= 7 && dateStr.contains('-')) {
+                            try {
+                              List<String> parts = dateStr.split('-');
+                              if (parts.length == 2) {
+                                String year = parts[0];
+                                String month = parts[1].padLeft(2, '0');
+                                eventDate = DateTime.tryParse('$year-$month-01');
+                              }
+                            } catch (_) {
+                              // Bỏ qua lỗi tách chuỗi
+                            }
+                          }
+                        }
                       }
+                      // -------------------------------------------------------------
 
                       return Card(
                         color: kCardColor,
@@ -160,20 +291,18 @@ class FigureDetailScreen extends StatelessWidget {
                           side: BorderSide(color: kPrimaryColor.withOpacity(0.1), width: 1),
                         ),
                         child: ListTile(
-                          leading: event['image_url'] != null &&
-                              event['image_url'].isNotEmpty
-                              ? ClipRRect(
-                            borderRadius: BorderRadius.circular(8),
-                            child: Image.network(
-                              event['image_url'],
-                              width: 50,
-                              height: 50,
-                              fit: BoxFit.cover,
-                              errorBuilder: (_, __, ___) =>
-                              const Icon(Icons.broken_image, color: kPrimaryColor),
+
+                          // 🌟 KHỐI LEADING ĐÃ ĐƯỢC CẬP NHẬT
+                          leading: SizedBox(
+                            width: 50,
+                            height: 50,
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(8),
+                              // Gọi hàm mới đã xử lý cả Mạng và Asset
+                              child: _buildEventImageWidget(event['image_url']),
                             ),
-                          )
-                              : const Icon(Icons.event, size: 30, color: kPrimaryColor), // Icon Mint
+                          ),
+
                           title: Text(
                             event['title'] ?? noTitle, // ✅ Dịch: 'Không có tiêu đề'
                             style: const TextStyle(fontWeight: FontWeight.w700, color: kTitleTextColor),
@@ -207,7 +336,7 @@ class FigureDetailScreen extends StatelessWidget {
                   ],
                 );
               },
-            ),
+            )
           ],
         ),
       ),

@@ -15,7 +15,8 @@ class DBHelper {
 
   static Database? _db;
   static const _dbName = "in_old_days.db";
-  static const _dbVersion = 29;
+  static const _dbVersion = 32
+  ;
 
   // ================== INITIALIZATION ==================
   static Future<void> prepareDatabaseFromAssets() async {
@@ -352,9 +353,11 @@ class DBHelper {
   }
 
   /// Lấy events theo ID nhân vật (dùng bảng figure_events)
+// ...
+  /// Lấy events theo ID nhân vật (dùng bảng figure_events)
   static Future<List<Map<String, dynamic>>> getEventsByFigureId(int figureId) async {
     final db = await database;
-    return await db.rawQuery('''
+    final rawResults = await db.rawQuery('''
       SELECT e.*, l.latitude, l.longitude, l.name AS location_name, l.region
       FROM events e
       JOIN figure_events fe ON e.event_id = fe.event_id
@@ -362,8 +365,22 @@ class DBHelper {
       WHERE fe.figure_id = ?
       ORDER BY e.date DESC
     ''', [figureId]);
-  }
 
+    // 🌟 KHẮC PHỤC: Loại bỏ các sự kiện có event_id trùng lặp
+    final Set<int> seenEventIds = {};
+    final List<Map<String, dynamic>> uniqueEvents = [];
+
+    for (var event in rawResults) {
+      final eventId = event['event_id'] as int?;
+      if (eventId != null && !seenEventIds.contains(eventId)) {
+        seenEventIds.add(eventId);
+        uniqueEvents.add(event);
+      }
+    }
+
+    return uniqueEvents; // Trả về danh sách đã được làm sạch
+  }
+// ...
   // ================== FIGURES ==================
   static Future<List<HistoricalFigure>> getAllFigures() async {
     final db = await database;

@@ -15,7 +15,7 @@ class DBHelper {
 
   static Database? _db;
   static const _dbName = "in_old_days.db";
-  static const _dbVersion = 33
+  static const _dbVersion = 34
   ;
 
   // ================== INITIALIZATION ==================
@@ -490,4 +490,8 @@ class DBHelper {
     final res = await db.query('users');
     return res.map((row) => UserModel.fromMap(row)).toList();
   }
+
+
 }
+
+

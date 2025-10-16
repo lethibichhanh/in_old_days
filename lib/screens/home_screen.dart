@@ -39,6 +39,7 @@ class _HomeScreenState extends State<HomeScreen> {
   int? _day; // 🆕 State cho ngày cụ thể
   bool _loading = true;
   List<EventModel> _events = [];
+  EventModel? _featuredEvent;
   String _filterType = "Tất cả"; // Giá trị mặc định ban đầu
 
   UserModel? _user;
@@ -143,6 +144,7 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   /// 📦 Load sự kiện từ DB (CẬP NHẬT: Kết hợp sự kiện Ngày cụ thể và Ngày/Tháng lặp lại)
+  /// 📦 Load sự kiện từ DB (CẬP NHẬT: Tách logic tìm Featured Event)
   Future<void> _loadEvents() async {
     setState(() => _loading = true);
 
@@ -183,35 +185,52 @@ class _HomeScreenState extends State<HomeScreen> {
     List<EventModel> allEvents = uniqueEventsMap.values.map((e) => EventModel.fromMap(e)).toList();
 
     final now = DateTime.now();
-
-    // Lấy chuỗi dịch cho các bộ lọc
     final filterFuture = _getText('filter_future');
     final filterPast = _getText('filter_past');
 
+    // --- 1. TÌM SỰ KIỆN NỔI BẬT (Gần nhất trong Tương lai) ---
+    // Lấy tất cả sự kiện trong tương lai có ngày xác định
+    List<EventModel> futureEvents = allEvents
+        .where((e) => e.date != null && e.date!.isAfter(now))
+        .toList();
+
+    // Sắp xếp Tăng Dần để sự kiện gần nhất trong tương lai lên đầu
+    futureEvents.sort((a, b) => a.date!.compareTo(b.date!));
+
+    EventModel? nearestFutureEvent;
+    if (futureEvents.isNotEmpty) {
+      nearestFutureEvent = futureEvents.first;
+      // Loại bỏ sự kiện nổi bật ra khỏi danh sách sự kiện chính
+      allEvents.removeWhere((e) => e.eventId == nearestFutureEvent!.eventId);
+    }
+    // ----------------------------------------------------
+
+    // --- 2. ÁP DỤNG BỘ LỌC THỜI GIAN CỦA NGƯỜI DÙNG CHO DANH SÁCH CÒN LẠI ---
     if (_filterType == filterFuture) {
+      // Nếu người dùng lọc Future, chỉ giữ lại các sự kiện FUTURE còn lại
       allEvents = allEvents.where((e) => e.date != null && e.date!.isAfter(now)).toList();
     } else if (_filterType == filterPast) {
+      // Nếu người dùng lọc Past, chỉ giữ lại các sự kiện PAST
       allEvents = allEvents.where((e) => e.date != null && e.date!.isBefore(now)).toList();
     }
 
-    // Sắp xếp lại: ưu tiên các sự kiện GẦN NHẤT (ASCENDING)
-    // ✅ FIX LỖI: Chuyển sang SẮP XẾP TĂNG DẦN (ASCENDING) để sự kiện gần nhất nằm ở vị trí đầu tiên
+    // --- 3. SẮP XẾP DANH SÁCH SỰ KIỆN CÒN LẠI (events) ---
+    // Sắp xếp các sự kiện còn lại theo ngày GIẢM DẦN (mới nhất lên đầu)
     allEvents.sort((a, b) {
       if (a.date == null && b.date == null) return 0;
       if (a.date == null) return 1;
       if (b.date == null) return -1;
-      // Sắp xếp TĂNG DẦN theo ngày. Ví dụ: 20/10 đứng trước 20/11
-      return a.date!.compareTo(b.date!); // <--- ĐÃ SỬA VỀ TĂNG DẦN (ASCENDING)
+      return b.date!.compareTo(a.date!); // Sắp xếp GIẢM DẦN (Latest date first)
     });
 
     _groupEvents(allEvents);
 
     setState(() {
-      _events = allEvents;
+      _featuredEvent = nearestFutureEvent; // Cập nhật Featured Event
+      _events = allEvents; // Cập nhật danh sách sự kiện chính (đã loại bỏ featured)
       _loading = false;
     });
   }
-
   /// 🎚️ Bộ lọc sự kiện (Giữ nguyên)
   void _openFilterDialog() async {
     final tr = AppLocalizations.of(context)!;
@@ -605,6 +624,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
 
   // --- Widget để nhóm các Sự kiện theo Ngày (Giữ nguyên logic dịch) ---
+// --- Widget để nhóm các Sự kiện theo Ngày (ĐÃ SỬA: Dùng _featuredEvent) ---
   List<Widget> _buildGroupedEventList() {
     List<Widget> widgets = [];
 
@@ -615,16 +635,28 @@ class _HomeScreenState extends State<HomeScreen> {
     final noEventsFound = _getText('no_events_found');
 
     // Thẻ nổi bật đầu tiên
-    if (_events.isNotEmpty) {
+    if (_featuredEvent != null) { // 👈 CHỈ HIỂN THỊ NẾU CÓ SỰ KIỆN NỔI BẬT ĐƯỢC TÌM THẤY
       widgets.add(Padding(
         padding: const EdgeInsets.only(top: 10, left: 20, right: 16),
         child: Text(featuredEvents, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kTitleTextColor)),
       ));
-      // Sự kiện đầu tiên là sự kiện GẦN NHẤT (vì đã sửa lỗi sắp xếp thành TĂNG DẦN)
-      widgets.add(_buildFeaturedCard(_events.first));
+      // Dùng _featuredEvent
+      widgets.add(_buildFeaturedCard(_featuredEvent!));
+    }
 
-      // Bắt đầu nhóm từ sự kiện thứ 2
-      final eventsToGroup = _events.sublist(1);
+    // Danh sách sự kiện còn lại (đã được lọc và sắp xếp)
+    final eventsToGroup = _events;
+
+    if (eventsToGroup.isNotEmpty) {
+
+      // Nếu không có sự kiện nổi bật, tiêu đề đầu tiên sẽ là 'Sự kiện nổi bật',
+      // Nếu đã có sự kiện nổi bật, tiêu đề đầu tiên sẽ là 'Sự kiện khác'.
+      if (_featuredEvent == null) {
+        widgets.add(Padding(
+          padding: const EdgeInsets.only(top: 10, left: 20, right: 16),
+          child: Text(featuredEvents, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kTitleTextColor)),
+        ));
+      }
 
       Map<String, List<EventModel>> remainingGroupedEvents = {};
       for (var event in eventsToGroup) {
@@ -640,6 +672,7 @@ class _HomeScreenState extends State<HomeScreen> {
         remainingGroupedEvents.entries.toList()..sort((e1, e2) {
           if (e1.key == unknownDateKey) return 1;
           if (e2.key == unknownDateKey) return -1;
+          // Sắp xếp nhóm ngày theo ngày (giảm dần)
           return e2.key.compareTo(e1.key);
         }),
       );
@@ -682,7 +715,6 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return widgets;
   }
-
   // --- Hàm hỗ trợ hiển thị tiêu đề bộ lọc ngày tháng (Đã xác nhận dùng dd/MM/yyyy) ---
   String _buildDateFilterText(AppLocalizations tr) {
     if (_day != null) {

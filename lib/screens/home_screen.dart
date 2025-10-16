@@ -1,4 +1,4 @@
-// File: home_screen.dart
+// File: home_screen.dart (ĐÃ FIX LỖI SẮP XẾP ĐỂ CHỌN SỰ KIỆN GẦN NHẤT)
 import 'dart:io';
 import 'package:flutter/material.dart';
 import 'package:intl/intl.dart';
@@ -194,12 +194,14 @@ class _HomeScreenState extends State<HomeScreen> {
       allEvents = allEvents.where((e) => e.date != null && e.date!.isBefore(now)).toList();
     }
 
-    // Sắp xếp lại: ưu tiên các sự kiện gần nhất (DESC)
+    // Sắp xếp lại: ưu tiên các sự kiện GẦN NHẤT (ASCENDING)
+    // ✅ FIX LỖI: Chuyển sang SẮP XẾP TĂNG DẦN (ASCENDING) để sự kiện gần nhất nằm ở vị trí đầu tiên
     allEvents.sort((a, b) {
       if (a.date == null && b.date == null) return 0;
       if (a.date == null) return 1;
       if (b.date == null) return -1;
-      return b.date!.compareTo(a.date!);
+      // Sắp xếp TĂNG DẦN theo ngày. Ví dụ: 20/10 đứng trước 20/11
+      return a.date!.compareTo(b.date!); // <--- ĐÃ SỬA VỀ TĂNG DẦN (ASCENDING)
     });
 
     _groupEvents(allEvents);
@@ -618,6 +620,7 @@ class _HomeScreenState extends State<HomeScreen> {
         padding: const EdgeInsets.only(top: 10, left: 20, right: 16),
         child: Text(featuredEvents, style: const TextStyle(fontSize: 20, fontWeight: FontWeight.w900, color: kTitleTextColor)),
       ));
+      // Sự kiện đầu tiên là sự kiện GẦN NHẤT (vì đã sửa lỗi sắp xếp thành TĂNG DẦN)
       widgets.add(_buildFeaturedCard(_events.first));
 
       // Bắt đầu nhóm từ sự kiện thứ 2

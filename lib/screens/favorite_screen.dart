@@ -2,17 +2,18 @@ import 'package:flutter/material.dart';
 import '../db/db_helper.dart';
 import 'event_detail_screen.dart';
 
-// --- Khai báo màu sắc Pastel Tươi sáng (Đồng bộ) ---
-const Color kPrimaryColor = Color(0xFF81C784); // Xanh Mint Nhẹ (Light Mint)
-const Color kAppBarColor = Color(0xFF4DB6AC); // Xanh Mint Đậm hơn
-const Color kAccentColor = Color(0xFFFFAB91); // Hồng Đào/Coral Nhạt
-const Color kBackgroundColor = Color(0xFFF9F9F9); // Nền trắng ngà
+// --- Màu Pastel đồng bộ ---
+const Color kPrimaryColor = Color(0xFF81C784);
+const Color kAppBarColor = Color(0xFF4DB6AC);
+const Color kAccentColor = Color(0xFFFFAB91);
+const Color kBackgroundColor = Color(0xFFF9F9F9);
 const Color kCardColor = Colors.white;
-const Color kTitleTextColor = Color(0xFF424242); // Xám Đen Nhẹ
-const Color kSubtextColor = Color(0xFF9E9E9E); // Xám Rất Nhẹ
+const Color kTitleTextColor = Color(0xFF424242);
+const Color kSubtextColor = Color(0xFF9E9E9E);
 
 class FavoriteScreen extends StatefulWidget {
   final int? userId;
+
   const FavoriteScreen({super.key, this.userId});
 
   @override
@@ -78,7 +79,7 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
     }
   }
 
-  /// 🖼️ Xử lý hiển thị ảnh
+  /// 🖼️ Hiển thị hình ảnh sự kiện
   Widget _buildImage(String? imageUrl) {
     const double size = 60;
     const double radius = 8;
@@ -92,7 +93,8 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
           color: kPrimaryColor.withOpacity(0.1),
           borderRadius: BorderRadius.circular(radius),
         ),
-        child: const Icon(Icons.image_not_supported, size: iconSize, color: kPrimaryColor),
+        child: const Icon(Icons.image_not_supported,
+            size: iconSize, color: kPrimaryColor),
       );
     }
 
@@ -120,7 +122,8 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
           width: size,
           height: size,
           color: kPrimaryColor.withOpacity(0.1),
-          child: const Icon(Icons.broken_image, size: iconSize, color: kPrimaryColor),
+          child: const Icon(Icons.broken_image,
+              size: iconSize, color: kPrimaryColor),
         ),
       ),
     );
@@ -132,7 +135,11 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
       return Scaffold(
         backgroundColor: kBackgroundColor,
         appBar: AppBar(
-          title: const Text("❤️ Sự kiện yêu thích", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+          title: const Text(
+            "❤️ Sự kiện yêu thích",
+            style: TextStyle(
+                fontWeight: FontWeight.bold, color: Colors.white),
+          ),
           backgroundColor: kAppBarColor,
           foregroundColor: Colors.white,
           elevation: 0,
@@ -143,7 +150,10 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
             child: Text(
               "Vui lòng đăng nhập để xem danh sách sự kiện yêu thích.",
               textAlign: TextAlign.center,
-              style: TextStyle(fontSize: 16, color: kAccentColor, fontWeight: FontWeight.w600),
+              style: TextStyle(
+                  fontSize: 16,
+                  color: kAccentColor,
+                  fontWeight: FontWeight.w600),
             ),
           ),
         ),
@@ -153,7 +163,11 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
     return Scaffold(
       backgroundColor: kBackgroundColor,
       appBar: AppBar(
-        title: const Text("❤️ Sự kiện yêu thích", style: TextStyle(fontWeight: FontWeight.bold, color: Colors.white)),
+        title: const Text(
+          " Sự kiện yêu thích",
+          style: TextStyle(
+              fontWeight: FontWeight.bold, color: Colors.white),
+        ),
         centerTitle: true,
         backgroundColor: kAppBarColor,
         foregroundColor: Colors.white,
@@ -165,7 +179,8 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
           ? Center(
         child: Text(
           "Chưa có sự kiện yêu thích nào!",
-          style: TextStyle(fontSize: 16, color: kSubtextColor),
+          style:
+          TextStyle(fontSize: 16, color: kSubtextColor),
         ),
       )
           : RefreshIndicator(
@@ -176,11 +191,13 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
           itemBuilder: (context, index) {
             final e = _favorites[index];
             final int eventId = e['id'] ?? e['event_id'] ?? 0;
-            final String title = e['title'] ?? "Không có tiêu đề";
+            final String title =
+                e['title'] ?? "Không có tiêu đề";
             final String? date = e['date'];
-            final String? imgPath = e['imageUrl'] ?? e['image_url'];
+            final String? imgPath =
+                e['imageUrl'] ?? e['image_url'];
 
-            // ✅ Format ngày đúng kiểu Việt Nam
+            // ✅ Định dạng ngày kiểu Việt Nam
             String displayDate = "";
             if (date != null && date.isNotEmpty) {
               try {
@@ -194,10 +211,13 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
 
             return Card(
               color: kCardColor,
-              margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              margin: const EdgeInsets.symmetric(
+                  horizontal: 16, vertical: 8),
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(12),
-                side: BorderSide(color: kPrimaryColor.withOpacity(0.3), width: 1),
+                side: BorderSide(
+                    color: kPrimaryColor.withOpacity(0.3),
+                    width: 1),
               ),
               elevation: 4,
               shadowColor: kPrimaryColor.withOpacity(0.2),
@@ -217,17 +237,37 @@ class _FavoriteScreenState extends State<FavoriteScreen> {
                   style: const TextStyle(color: kSubtextColor),
                 ),
                 trailing: IconButton(
-                  icon: const Icon(Icons.favorite, color: kAccentColor),
+                  icon: const Icon(Icons.favorite,
+                      color: kAccentColor),
                   onPressed: () => _removeFavorite(eventId),
                 ),
+
+                // ✅ Cập nhật phần mở chi tiết sự kiện
                 onTap: () async {
-                  await Navigator.push(
+                  if (widget.userId == null) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text(
+                            "⚠️ Vui lòng đăng nhập để xem chi tiết."),
+                      ),
+                    );
+                    return;
+                  }
+
+                  final bool? result = await Navigator.push<bool?>(
                     context,
                     MaterialPageRoute(
-                      builder: (_) => EventDetailScreen(eventId: eventId),
+                      builder: (_) => EventDetailScreen(
+                        eventId: eventId,
+                        userId: widget.userId!, // truyền userId
+                      ),
                     ),
                   );
-                  _loadFavorites();
+
+                  // Nếu người dùng bỏ yêu thích trong trang chi tiết => cập nhật lại danh sách
+                  if (result == false) {
+                    await _loadFavorites();
+                  }
                 },
               ),
             );

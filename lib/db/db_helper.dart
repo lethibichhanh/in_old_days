@@ -15,7 +15,7 @@ class DBHelper {
 
   static Database? _db;
   static const _dbName = "in_old_days.db";
-  static const _dbVersion = 32
+  static const _dbVersion = 33
   ;
 
   // ================== INITIALIZATION ==================
